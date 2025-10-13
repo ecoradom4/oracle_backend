@@ -18,7 +18,7 @@ class EmailService {
   async sendWelcomeEmail(userEmail, userName) {
     try {
       const result = await this.resend.emails.send({
-        from: 'Cine Connect <no-reply@cineconnect.com>',
+        from: 'Cine Connect <onboarding@resend.dev>',
         to: userEmail,
         subject: '¡Bienvenido a Cine Connect! 🎬',
         html: this.getWelcomeEmailTemplate(userName),
@@ -40,7 +40,7 @@ class EmailService {
       const attachments = await this.getBookingAttachments(booking);
 
       const result = await this.resend.emails.send({
-        from: 'Cine Connect <no-reply@cineconnect.com>',
+        from: 'Cine Connect <onboarding@resend.dev>',
         to: customer_email,
         subject: `Confirmación de Reserva - ${showtime.movie.title} 🎟️`,
         html: this.getBookingConfirmationTemplate(booking),
@@ -64,7 +64,7 @@ class EmailService {
 
       if (hoursUntilShowtime > 0 && hoursUntilShowtime <= 24) {
         const result = await this.resend.emails.send({
-          from: 'Cine Connect <no-reply@cineconnect.com>',
+          from: 'Cine Connect <onboarding@resend.dev>',
           to: booking.customer_email,
           subject: `Recordatorio: ${booking.showtime.movie.title} hoy a las ${booking.showtime.time} ⏰`,
           html: this.getReminderTemplate(booking),
