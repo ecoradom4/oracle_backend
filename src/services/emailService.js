@@ -8,6 +8,12 @@ class EmailService {
     this.resend = new Resend(process.env.RESEND_API_KEY);
   }
 
+  async verifyConnection() {
+  console.log('✅ Servicio de email (Resend) listo – no requiere verificación SMTP');
+  return true;
+}
+
+
   // Enviar email de bienvenida
   async sendWelcomeEmail(userEmail, userName) {
     try {
