@@ -48,8 +48,6 @@ const authController = require('../controllers/authController');
  *         customer_email:
  *           type: string
  *           format: email
- *         customer_phone:
- *           type: string
  *         qr_code_data:
  *           type: string
  *           description: Data URL del código QR
@@ -95,8 +93,6 @@ const authController = require('../controllers/authController');
  *               customer_email:
  *                 type: string
  *                 format: email
- *               customer_phone:
- *                 type: string
  *     responses:
  *       201:
  *         description: Reserva creada exitosamente

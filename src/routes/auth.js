@@ -44,9 +44,6 @@ const authController = require('../controllers/authController');
  *                 enum: [admin, cliente]
  *                 default: cliente
  *                 example: "cliente"
- *               phone:
- *                 type: string
- *                 example: "+502 1234-5678"
  *     responses:
  *       201:
  *         description: Usuario registrado exitosamente
