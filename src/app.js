@@ -12,7 +12,7 @@ class App {
   constructor() {
     this.app = express();
     this.port = process.env.PORT || 4000;
-    
+
     this.initializeDatabase();
     this.initializeMiddlewares();
     this.initializeServices();
@@ -28,8 +28,8 @@ class App {
 
       // Sincronizar modelos (en desarrollo)
       //if (process.env.NODE_ENV === 'development') {
-        //await sequelize.sync({ alter: true });
-        //console.log('✅ Modelos sincronizados con la base de datos');
+      //await sequelize.sync({ alter: true });
+      //console.log('✅ Modelos sincronizados con la base de datos');
       //}
 
     } catch (error) {
@@ -57,8 +57,14 @@ class App {
     this.app.use(bodyParser.json({ limit: '10mb' }));
     this.app.use(bodyParser.urlencoded({ extended: true, limit: '10mb' }));
 
-    // Static files
-    this.app.use('/storage', express.static(path.join(__dirname, '../storage')));
+    // Archivos estáticos (para servir recibos, QR, imágenes, etc.)
+    this.app.use('/storage', express.static(path.resolve(__dirname, '../storage'), {
+      maxAge: '7d',
+      setHeaders: (res) => {
+        res.setHeader('Access-Control-Allow-Origin', '*');
+      },
+    }));
+
 
     // Request logging
     this.app.use((req, res, next) => {
@@ -148,7 +154,7 @@ class App {
           field: err.path,
           message: err.message
         }));
-        
+
         return res.status(400).json({
           success: false,
           message: 'Error de validación',
@@ -215,17 +221,17 @@ class App {
   setupGracefulShutdown() {
     const shutdown = async (signal) => {
       console.log(`\n📴 Recibido ${signal}. Cerrando servidor...`);
-      
+
       this.server.close(async () => {
         console.log('✅ Servidor HTTP cerrado');
-        
+
         try {
           await sequelize.close();
           console.log('✅ Conexión a la base de datos cerrada');
         } catch (error) {
           console.error('❌ Error cerrando conexión a BD:', error);
         }
-        
+
         console.log('👋 Servidor apagado correctamente');
         process.exit(0);
       });

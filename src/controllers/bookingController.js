@@ -459,8 +459,7 @@ class BookingController {
     }
   }
 
-  // Descargar recibo PDF
-  async downloadReceipt(req, res) {
+    async downloadReceipt(req, res) {
     try {
       const { id } = req.params;
       const user_id = req.userId;
@@ -504,14 +503,19 @@ class BookingController {
         });
       }
 
-      // En una implementación real, aquí servirías el archivo PDF
-      // Por ahora simulamos la descarga
+      // Obtener la URL base del backend desde las variables de entorno
+      const backendUrl = process.env.BACKEND_URL || 'http://localhost:4000';
+      
+      // Construir la URL completa del recibo
+      const fullDownloadUrl = `${backendUrl}${booking.receipt_url}`;
+
       res.json({
         success: true,
         message: 'Recibo listo para descargar',
         data: {
-          download_url: booking.receipt_url,
-          filename: `recibo-${booking.transaction_id}.pdf`
+          download_url: fullDownloadUrl, // URL completa
+          filename: `recibo-${booking.transaction_id}.pdf`,
+          relative_url: booking.receipt_url // Mantener también la ruta relativa por si se necesita
         }
       });
 
