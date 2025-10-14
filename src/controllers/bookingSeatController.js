@@ -1,4 +1,3 @@
-// src/controllers/bookingSeatController.js
 const { BookingSeat, Booking, Seat, Showtime } = require('../models');
 
 const getBookedSeatsByShowtime = async (req, res) => {

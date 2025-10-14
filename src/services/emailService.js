@@ -9,9 +9,9 @@ class EmailService {
   }
 
   async verifyConnection() {
-  console.log('✅ Servicio de email (Resend) listo – no requiere verificación SMTP');
-  return true;
-}
+    console.log('✅ Servicio de email (Resend) listo – no requiere verificación SMTP');
+    return true;
+  }
 
 
   // Enviar email de bienvenida
@@ -126,7 +126,6 @@ class EmailService {
     return value || 0;
   }
 
-  // --- Templates HTML (idénticos a los tuyos) ---
   getWelcomeEmailTemplate(userName) {
     return `
       <!DOCTYPE html>
@@ -174,65 +173,71 @@ class EmailService {
   }
 
   getBookingConfirmationTemplate(booking) {
-    const { showtime, bookingSeats, total_price, transaction_id } = booking;
+    const { showtime, bookingSeats, total_price, transaction_id, qr_data_url } = booking;
     const seatsList = bookingSeats.map(bs => `${bs.seat.row}${bs.seat.number}`).join(', ');
     const totalPrice = this.ensureNumber(total_price);
 
     return `
-      <!DOCTYPE html>
-      <html>
-      <head>
-        <style>
-          body { font-family: Arial, sans-serif; color: #333; }
-          .container { max-width: 600px; margin: 0 auto; padding: 20px; }
-          .header { background: linear-gradient(135deg, #48bb78 0%, #38a169 100%); color: white; padding: 30px; text-align: center; border-radius: 10px 10px 0 0; }
-          .content { background: #f7fafc; padding: 30px; border-radius: 0 0 10px 10px; }
-          .ticket { background: white; border: 2px dashed #cbd5e0; padding: 20px; margin: 20px 0; border-radius: 8px; }
-          .info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin: 15px 0; }
-          .total { background: #edf2f7; padding: 15px; border-radius: 5px; text-align: center; font-weight: bold; }
-          .footer { text-align: center; margin-top: 20px; color: #666; font-size: 12px; }
-        </style>
-      </head>
-      <body>
-        <div class="container">
-          <div class="header">
-            <h1>✅ Reserva Confirmada</h1>
-            <p>Tu entrada para ${showtime.movie.title}</p>
-          </div>
-          <div class="content">
-            <div class="ticket">
-              <h2>${showtime.movie.title}</h2>
-              <div class="info-grid">
-                <div><strong>Fecha:</strong> ${new Date(showtime.date).toLocaleDateString('es-ES')}</div>
-                <div><strong>Hora:</strong> ${showtime.time}</div>
-                <div><strong>Sala:</strong> ${showtime.room.name}</div>
-                <div><strong>Ubicación:</strong> ${showtime.room.location}</div>
-                <div><strong>Asientos:</strong> ${seatsList}</div>
-                <div><strong>Transacción:</strong> ${transaction_id}</div>
-              </div>
-              <div class="total">
-                Total Pagado: $${totalPrice.toFixed(2)}
-              </div>
-            </div>
-            <h3>📋 Información Importante</h3>
-            <ul>
-              <li>Llega al cine al menos 15 minutos antes de la función</li>
-              <li>Presenta este email o el código QR en la entrada</li>
-              <li>Los boletos adjuntos incluyen tu recibo y código de acceso</li>
-              <li>Para cambios o cancelaciones, contacta a nuestro servicio al cliente</li>
-            </ul>
-            <p><strong>📍 Dirección del cine:</strong><br>${showtime.room.location} - Cine Connect</p>
-            <p>¡Gracias por tu compra y que disfrutes la película! 🍿</p>
-          </div>
-          <div class="footer">
-            <p>Cine Connect - Sistema de Reservas</p>
-            <p>Email: soporte@cineconnect.com | Tel: +502 1234-5678</p>
-          </div>
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <style>
+        body { font-family: Arial, sans-serif; color: #333; }
+        .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+        .header { background: linear-gradient(135deg, #48bb78 0%, #38a169 100%); color: white; padding: 30px; text-align: center; border-radius: 10px 10px 0 0; }
+        .content { background: #f7fafc; padding: 30px; border-radius: 0 0 10px 10px; }
+        .ticket { background: white; border: 2px dashed #cbd5e0; padding: 20px; margin: 20px 0; border-radius: 8px; position: relative; }
+        .qr { position: absolute; right: 20px; top: 20px; }
+        .info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin: 15px 0; }
+        .total { background: #edf2f7; padding: 15px; border-radius: 5px; text-align: center; font-weight: bold; }
+        .footer { text-align: center; margin-top: 20px; color: #666; font-size: 12px; }
+      </style>
+    </head>
+    <body>
+      <div class="container">
+        <div class="header">
+          <h1>✅ Reserva Confirmada</h1>
+          <p>Tu entrada para ${showtime.movie.title}</p>
         </div>
-      </body>
-      </html>
-    `;
+        <div class="content">
+          <div class="ticket">
+            <h2>${showtime.movie.title}</h2>
+            ${qr_data_url
+        ? `<div class="qr"><img src="${qr_data_url}" alt="QR de reserva" width="100" height="100" /></div>`
+        : ''
+      }
+            <div class="info-grid">
+              <div><strong>Fecha:</strong> ${new Date(showtime.date).toLocaleDateString('es-ES')}</div>
+              <div><strong>Hora:</strong> ${showtime.time}</div>
+              <div><strong>Sala:</strong> ${showtime.room.name}</div>
+              <div><strong>Ubicación:</strong> ${showtime.room.location}</div>
+              <div><strong>Asientos:</strong> ${seatsList}</div>
+              <div><strong>Transacción:</strong> ${transaction_id}</div>
+            </div>
+            <div class="total">
+              Total Pagado: Q${totalPrice.toFixed(2)}
+            </div>
+          </div>
+          <h3>📋 Información Importante</h3>
+          <ul>
+            <li>Llega al cine al menos 15 minutos antes de la función</li>
+            <li>Presenta este email o el código QR en la entrada</li>
+            <li>Los boletos adjuntos incluyen tu recibo y código de acceso</li>
+            <li>Para cambios o cancelaciones, contacta a nuestro servicio al cliente</li>
+          </ul>
+          <p><strong>📍 Dirección del cine:</strong><br>${showtime.room.location} - Cine Connect</p>
+          <p>¡Gracias por tu compra y que disfrutes la película! 🍿</p>
+        </div>
+        <div class="footer">
+          <p>Cine Connect - Sistema de Reservas</p>
+          <p>Email: soporte@cineconnect.com | Tel: +502 1234-5678</p>
+        </div>
+      </div>
+    </body>
+    </html>
+  `;
   }
+
 
   getReminderTemplate(booking) {
     const { showtime, bookingSeats } = booking;

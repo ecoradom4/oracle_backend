@@ -10,11 +10,9 @@ class RoomController {
 
       const whereClause = {};
       
-      // CORRECCIÓN: Para campos ENUM, necesitamos usar una condición diferente
       if (search) {
         whereClause[Op.or] = [
           { name: { [Op.iLike]: `%${search}%` } },
-          // Para el campo ENUM 'location', usamos una comparación exacta o convertimos a texto
           sequelize.where(
             sequelize.cast(sequelize.col('Room.location'), 'TEXT'),
             { [Op.iLike]: `%${search}%` }

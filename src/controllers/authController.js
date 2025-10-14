@@ -1,4 +1,3 @@
-// src/controllers/authController.js
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const { User } = require('../models');
@@ -50,7 +49,7 @@ class AuthController {
       const token = jwt.sign(
         { userId: user.id, email: user.email, role: user.role },
         process.env.JWT_SECRET,
-        { expiresIn: '24h' }
+        { expiresIn: '1h' }
       );
 
       // Enviar email de bienvenida

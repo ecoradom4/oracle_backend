@@ -4,17 +4,16 @@ const QRService = require('../services/qrService');
 const { sendBookingConfirmation } = require('../services/emailService');
 const PDFService = require('../services/pdfService.js');
 
-
 class BookingController {
   // Crear nueva reserva
   async createBooking(req, res) {
     const transaction = await sequelize.transaction();
-    
+
     try {
-      const { 
-        showtime_id, 
-        seat_ids, 
-        payment_method, 
+      const {
+        showtime_id,
+        seat_ids,
+        payment_method,
         customer_email
       } = req.body;
 
@@ -29,7 +28,7 @@ class BookingController {
         });
       }
 
-      // Verificar que la función existe y es futura
+      // Verificar que la función existe
       const showtime = await Showtime.findByPk(showtime_id, {
         include: [
           { model: Movie, as: 'movie' },
@@ -46,6 +45,7 @@ class BookingController {
         });
       }
 
+      // Verificar que la función sea futura
       const showtimeDate = new Date(`${showtime.date}T${showtime.time}`);
       if (showtimeDate < new Date()) {
         await transaction.rollback();
@@ -57,7 +57,7 @@ class BookingController {
 
       // Verificar disponibilidad de asientos
       const seats = await Seat.findAll({
-        where: { 
+        where: {
           id: { [Op.in]: seat_ids },
           room_id: showtime.room_id
         },
@@ -72,12 +72,12 @@ class BookingController {
         });
       }
 
-      // Verificar que los asientos no estén ya reservados
+      // Verificar que no estén ya reservados
       const bookedSeats = await BookingSeat.findAll({
         include: [{
           model: Booking,
           as: 'booking',
-          where: { 
+          where: {
             showtime_id,
             status: { [Op.in]: ['confirmed', 'pending'] }
           },
@@ -98,46 +98,39 @@ class BookingController {
         });
       }
 
-      // Calcular precio total
-      const seatPrices = {
-        standard: 12.5,
-        premium: 15.0,
-        vip: 20.0
-      };
-
-      // Función para asegurar que un valor sea número
-      const ensureNumber = (value) => {
-        if (typeof value === 'string') {
-          const parsed = parseFloat(value);
-          return isNaN(parsed) ? 0 : parsed;
-        }
-        return value || 0;
-      };
-
+      // Calcular precios
+      const basePrice = parseFloat(showtime.price);
       let totalPrice = 0;
       const bookingSeatsData = [];
 
       for (const seat of seats) {
-        const basePrice = showtime.price !== undefined ? showtime.price : seatPrices[seat.type];
-        const seatPrice = ensureNumber(basePrice);
-        
+        let seatPrice = basePrice;
+
+        switch (seat.type.toLowerCase()) {
+          case 'premium':
+            seatPrice *= 1.10;
+            break;
+          case 'vip':
+            seatPrice *= 1.20;
+            break;
+        }
+
+        seatPrice = parseFloat(seatPrice.toFixed(2));
         totalPrice += seatPrice;
+
         bookingSeatsData.push({
           seat_id: seat.id,
           price: seatPrice
         });
       }
 
-      // Agregar cargo por servicio (5%)
-      const serviceFee = totalPrice * 0.05;
-      totalPrice += serviceFee;
+      const serviceFee = parseFloat((totalPrice * 0.05).toFixed(2));
+      totalPrice = parseFloat((totalPrice + serviceFee).toFixed(2));
 
-      // Asegurar formato numérico final
-      totalPrice = parseFloat(totalPrice.toFixed(2));
-
-      // Crear la reserva
+      // Crear transacción única
       const transaction_id = `TXN-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-      
+
+      // Crear reserva
       const booking = await Booking.create({
         transaction_id,
         user_id,
@@ -148,7 +141,7 @@ class BookingController {
         status: 'confirmed'
       }, { transaction });
 
-      // Crear registros de asientos reservados
+      // Asociar asientos reservados
       const bookingSeats = bookingSeatsData.map(bs => ({
         ...bs,
         booking_id: booking.id
@@ -156,36 +149,43 @@ class BookingController {
 
       await BookingSeat.bulkCreate(bookingSeats, { transaction });
 
-      // Actualizar asientos disponibles en la función
-      await showtime.decrement('available_seats', { 
+      // Actualizar cupo
+      await showtime.decrement('available_seats', {
         by: seat_ids.length,
-        transaction 
+        transaction
       });
 
-      // Generar QR Code
+      // Generar QR
       const qrResult = await QRService.generateBookingQR({
-    transaction_id,
-    id: booking.id,
-    showtime,
-    bookingSeats: bookingSeatsData.map((bs, index) => ({
-        seat: seats[index]
-    })),
-    customer_email: booking.customer_email,
-    purchase_date: booking.purchase_date
-});
+        transaction_id,
+        id: booking.id,
+        showtime,
+        bookingSeats: bookingSeatsData.map((bs, index) => ({
+          seat: seats[index]
+        })),
+        customer_email: booking.customer_email,
+        purchase_date: booking.purchase_date
+      });
 
-await booking.update({ 
-    qr_code_data: qrResult.dataURL 
-}, { transaction });
+      await booking.update({
+        qr_code_data: qrResult.dataURL
+      }, { transaction });
 
-      // Generar recibo PDF (DENTRO de la transacción)
-      const receiptUrl = await PDFService.generateReceiptPDF(booking, showtime, seats, totalPrice);
+      // Generar PDF con QR
+      const receiptUrl = await PDFService.generateReceiptPDF(
+        booking,
+        showtime,
+        seats,
+        totalPrice,
+        qrResult.filePath // aquí pasamos correctamente el QR físico
+      );
+
       await booking.update({ receipt_url: receiptUrl }, { transaction });
 
-      // HACER COMMIT DE LA TRANSACCIÓN PRINCIPAL
+      // Confirmar transacción
       await transaction.commit();
 
-      // Obtener booking completo con relaciones (FUERA de la transacción)
+      // Obtener reserva completa (fuera de la transacción)
       const completeBooking = await Booking.findByPk(booking.id, {
         include: [
           {
@@ -204,14 +204,14 @@ await booking.update({
         ]
       });
 
-      // Enviar email de confirmación (FUERA de la transacción)
-      // Esto se hace fuera de la transacción para no bloquear la respuesta
+      // Añadir QR base64 para el correo
+      completeBooking.qr_data_url = qrResult.dataURL;
+
+      // ✅ Enviar correo de confirmación
       try {
         await sendBookingConfirmation(completeBooking);
       } catch (emailError) {
         console.error('Error enviando email de confirmación:', emailError);
-        // No hacemos rollback porque la reserva ya fue creada exitosamente
-        // Solo logueamos el error
       }
 
       res.status(201).json({
@@ -221,11 +221,10 @@ await booking.update({
       });
 
     } catch (error) {
-      // Verificar si la transacción todavía está activa antes de hacer rollback
       if (transaction && !transaction.finished) {
         await transaction.rollback();
       }
-      
+
       console.error('Error creando reserva:', error);
       res.status(500).json({
         success: false,
@@ -255,13 +254,13 @@ await booking.update({
             model: Showtime,
             as: 'showtime',
             include: [
-              { 
-                model: Movie, 
+              {
+                model: Movie,
                 as: 'movie',
                 attributes: ['id', 'title', 'poster']
               },
-              { 
-                model: Room, 
+              {
+                model: Room,
                 as: 'room',
                 attributes: ['id', 'name', 'location']
               }
@@ -270,8 +269,8 @@ await booking.update({
           {
             model: BookingSeat,
             as: 'bookingSeats',
-            include: [{ 
-              model: Seat, 
+            include: [{
+              model: Seat,
               as: 'seat',
               attributes: ['id', 'row', 'number', 'type']
             }]
@@ -312,7 +311,7 @@ await booking.update({
       const user_role = req.userRole;
 
       const whereClause = { id };
-      
+
       // Usuarios normales solo pueden ver sus propias reservas
       if (user_role !== 'admin') {
         whereClause.user_id = user_id;
@@ -325,13 +324,13 @@ await booking.update({
             model: Showtime,
             as: 'showtime',
             include: [
-              { 
-                model: Movie, 
+              {
+                model: Movie,
                 as: 'movie',
                 attributes: ['id', 'title', 'genre', 'duration', 'poster']
               },
-              { 
-                model: Room, 
+              {
+                model: Room,
                 as: 'room',
                 attributes: ['id', 'name', 'location']
               }
@@ -340,8 +339,8 @@ await booking.update({
           {
             model: BookingSeat,
             as: 'bookingSeats',
-            include: [{ 
-              model: Seat, 
+            include: [{
+              model: Seat,
               as: 'seat',
               attributes: ['id', 'row', 'number', 'type']
             }]
@@ -379,7 +378,7 @@ await booking.update({
   // Cancelar reserva
   async cancelBooking(req, res) {
     const transaction = await sequelize.transaction();
-    
+
     try {
       const { id } = req.params;
       const user_id = req.userId;
@@ -435,9 +434,9 @@ await booking.update({
       });
 
       // Liberar asientos en la función
-      await booking.showtime.increment('available_seats', { 
+      await booking.showtime.increment('available_seats', {
         by: seatCount,
-        transaction 
+        transaction
       });
 
       // Cancelar reserva

@@ -35,7 +35,7 @@ class ShowtimeController {
           {
             model: Movie,
             as: 'movie',
-            attributes: ['id', 'title', 'genre', 'duration', 'rating', 'poster']
+            attributes: ['id', 'title', 'genre', 'duration', 'rating', 'poster', 'price']
           },
           {
             model: Room,
@@ -49,10 +49,23 @@ class ShowtimeController {
         ]
       });
 
+      // Agregar precios derivados de ticket
+      const showtimesWithPrices = showtimes.rows.map(showtime => {
+        const standardPrice = parseFloat(showtime.price);
+        return {
+          ...showtime.toJSON(),
+          ticket_prices: {
+            standard: standardPrice.toFixed(2),
+            premium: (standardPrice * 1.10).toFixed(2),
+            vip: (standardPrice * 1.20).toFixed(2)
+          }
+        };
+      });
+
       res.json({
         success: true,
         data: {
-          showtimes: showtimes.rows,
+          showtimes: showtimesWithPrices,
           pagination: {
             total: showtimes.count,
             page: parseInt(page),
@@ -74,112 +87,121 @@ class ShowtimeController {
   }
 
   // Obtener función específica por ID con detalles completos
-async getShowtimeById(req, res) {
-  try {
-    const { id } = req.params;
+  async getShowtimeById(req, res) {
+    try {
+      const { id } = req.params;
 
-    const showtime = await Showtime.findByPk(id, {
-      include: [
-        {
-          model: Movie,
-          as: 'movie',
-          attributes: ['id', 'title', 'genre', 'duration', 'rating', 'poster', 'description']
+      const showtime = await Showtime.findByPk(id, {
+        include: [
+          {
+            model: Movie,
+            as: 'movie',
+            attributes: ['id', 'title', 'genre', 'duration', 'rating', 'poster', 'description', 'price']
+          },
+          {
+            model: Room,
+            as: 'room',
+            attributes: ['id', 'name', 'capacity', 'type', 'location']
+          }
+        ]
+      });
+
+      if (!showtime) {
+        return res.status(404).json({
+          success: false,
+          message: 'Función no encontrada'
+        });
+      }
+
+      // Obtener asientos de la sala
+      const seats = await Seat.findAll({
+        where: { room_id: showtime.room_id },
+        attributes: ['id', 'row', 'number', 'type', 'status'],
+        order: [
+          ['row', 'ASC'],
+          ['number', 'ASC']
+        ]
+      });
+
+      // Obtener asientos reservados para esta función
+      const bookedSeats = await BookingSeat.findAll({
+        include: [{
+          model: Booking,
+          as: 'booking',
+          where: { 
+            showtime_id: id,
+            status: { [Op.in]: ['confirmed', 'pending'] }
+          },
+          attributes: []
+        }],
+        attributes: ['seat_id'],
+        raw: true
+      });
+
+      const bookedSeatIds = bookedSeats.map(bs => bs.seat_id);
+
+      // Preparar datos de asientos con disponibilidad
+      const seatsWithAvailability = seats.map(seat => ({
+        ...seat.toJSON(),
+        is_available: !bookedSeatIds.includes(seat.id)
+      }));
+
+      // Calcular precios de tickets derivados
+      const standardPrice = parseFloat(showtime.price);
+      const ticket_prices = {
+        standard: standardPrice.toFixed(2),
+        premium: (standardPrice * 1.10).toFixed(2),
+        vip: (standardPrice * 1.20).toFixed(2)
+      };
+
+      // Construir respuesta completa
+      const response = {
+        id: showtime.id,
+        movie_id: showtime.movie_id,
+        room_id: showtime.room_id,
+        date: showtime.date,
+        time: showtime.time,
+        price: standardPrice,
+        available_seats: showtime.available_seats,
+        total_seats: showtime.total_seats,
+        createdAt: showtime.createdAt,
+        updatedAt: showtime.updatedAt,
+        movie: showtime.movie,
+        room: showtime.room,
+        seats: seatsWithAvailability,
+        booking_info: {
+          total_seats: showtime.total_seats,
+          available_seats: showtime.available_seats,
+          booked_seats: bookedSeatIds.length,
+          occupancy_rate: ((bookedSeatIds.length / showtime.total_seats) * 100).toFixed(2)
         },
-        {
-          model: Room,
-          as: 'room',
-          attributes: ['id', 'name', 'capacity', 'type', 'location']
-        }
-      ]
-    });
+        ticket_prices
+      };
 
-    if (!showtime) {
-      return res.status(404).json({
+      res.json({
+        success: true,
+        data: { showtime: response }
+      });
+
+    } catch (error) {
+      console.error('Error obteniendo función:', error);
+      res.status(500).json({
         success: false,
-        message: 'Función no encontrada'
+        message: 'Error interno del servidor',
+        error: error.message
       });
     }
-
-    // Obtener asientos de la sala
-    const seats = await Seat.findAll({
-      where: { room_id: showtime.room_id },
-      attributes: ['id', 'row', 'number', 'type', 'status'],
-      order: [
-        ['row', 'ASC'],
-        ['number', 'ASC']
-      ]
-    });
-
-    // Obtener asientos reservados para esta función
-    const bookedSeats = await BookingSeat.findAll({
-      include: [{
-        model: Booking,
-        as: 'booking',
-        where: { 
-          showtime_id: id,
-          status: { [Op.in]: ['confirmed', 'pending'] }
-        },
-        attributes: []
-      }],
-      attributes: ['seat_id'],
-      raw: true
-    });
-
-    const bookedSeatIds = bookedSeats.map(bs => bs.seat_id);
-
-    // Preparar datos de asientos con disponibilidad
-    const seatsWithAvailability = seats.map(seat => ({
-      ...seat.toJSON(),
-      is_available: !bookedSeatIds.includes(seat.id)
-    }));
-
-    // Construir respuesta completa
-    const response = {
-      id: showtime.id,
-      movie_id: showtime.movie_id,
-      room_id: showtime.room_id,
-      date: showtime.date,
-      time: showtime.time,
-      price: showtime.price,
-      available_seats: showtime.available_seats,
-      total_seats: showtime.total_seats,
-      createdAt: showtime.createdAt,
-      updatedAt: showtime.updatedAt,
-      movie: showtime.movie,
-      room: showtime.room,
-      seats: seatsWithAvailability,
-      booking_info: {
-        total_seats: showtime.total_seats,
-        available_seats: showtime.available_seats,
-        booked_seats: bookedSeatIds.length,
-        occupancy_rate: ((bookedSeatIds.length / showtime.total_seats) * 100).toFixed(2)
-      }
-    };
-
-    res.json({
-      success: true,
-      data: { showtime: response }
-    });
-
-  } catch (error) {
-    console.error('Error obteniendo función:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Error interno del servidor',
-      error: error.message
-    });
   }
-}
-  
+
   // Crear nueva función
   async createShowtime(req, res) {
     const transaction = await sequelize.transaction();
     
     try {
-      const { movie_id, room_id, date, time, price } = req.body;
+      const { movie_id, room_id, date, time } = req.body;
 
       // Validaciones
-      if (!movie_id || !room_id || !date || !time || !price) {
+      if (!movie_id || !room_id || !date || !time) {
         await transaction.rollback();
         return res.status(400).json({
           success: false,
@@ -209,12 +231,7 @@ async getShowtimeById(req, res) {
 
       // Verificar conflicto de horarios en la misma sala
       const conflictingShowtime = await Showtime.findOne({
-        where: {
-          room_id,
-          date,
-          time,
-          id: { [Op.not]: req.params.id } // Excluir la función actual en updates
-        },
+        where: { room_id, date, time },
         transaction
       });
 
@@ -226,13 +243,34 @@ async getShowtimeById(req, res) {
         });
       }
 
+      // Calcular precio base según tipo de sala
+      let basePrice = parseFloat(movie.price);
+
+      switch (room.type.toLowerCase()) {
+        case 'premium':
+          basePrice *= 1.10;
+          break;
+        case '4dx':
+          basePrice *= 1.15;
+          break;
+        case 'imax':
+          basePrice *= 1.20;
+          break;
+        case 'vip':
+          basePrice *= 1.25;
+          break;
+        default:
+          // estándar
+          break;
+      }
+
       // Crear la función
       const showtime = await Showtime.create({
         movie_id,
         room_id,
         date,
         time,
-        price: parseFloat(price),
+        price: basePrice,
         available_seats: room.capacity,
         total_seats: room.capacity
       }, { transaction });
@@ -244,12 +282,12 @@ async getShowtimeById(req, res) {
           {
             model: Movie,
             as: 'movie',
-            attributes: ['id', 'title', 'genre', 'duration']
+            attributes: ['id', 'title', 'genre', 'duration', 'price']
           },
           {
             model: Room,
             as: 'room',
-            attributes: ['id', 'name', 'capacity', 'location']
+            attributes: ['id', 'name', 'capacity', 'location', 'type']
           }
         ]
       });
