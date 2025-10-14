@@ -73,7 +73,8 @@ class ShowtimeController {
     }
   }
 
-  async getShowtimeById(req, res) {
+  // Obtener función específica por ID con detalles completos
+async getShowtimeById(req, res) {
   try {
     const { id } = req.params;
 
@@ -87,12 +88,7 @@ class ShowtimeController {
         {
           model: Room,
           as: 'room',
-          attributes: ['id', 'name', 'capacity', 'type', 'location', 'features'],
-          include: [{
-            model: Seat,
-            as: 'seats',
-            attributes: ['id', 'row', 'number', 'type', 'status']
-          }]
+          attributes: ['id', 'name', 'capacity', 'type', 'location']
         }
       ]
     });
@@ -103,6 +99,16 @@ class ShowtimeController {
         message: 'Función no encontrada'
       });
     }
+
+    // Obtener asientos de la sala
+    const seats = await Seat.findAll({
+      where: { room_id: showtime.room_id },
+      attributes: ['id', 'row', 'number', 'type', 'status'],
+      order: [
+        ['row', 'ASC'],
+        ['number', 'ASC']
+      ]
+    });
 
     // Obtener asientos reservados para esta función
     const bookedSeats = await BookingSeat.findAll({
@@ -122,7 +128,7 @@ class ShowtimeController {
     const bookedSeatIds = bookedSeats.map(bs => bs.seat_id);
 
     // Preparar datos de asientos con disponibilidad
-    const seatsWithAvailability = showtime.room.seats.map(seat => ({
+    const seatsWithAvailability = seats.map(seat => ({
       ...seat.toJSON(),
       is_available: !bookedSeatIds.includes(seat.id)
     }));
@@ -140,10 +146,8 @@ class ShowtimeController {
       createdAt: showtime.createdAt,
       updatedAt: showtime.updatedAt,
       movie: showtime.movie,
-      room: {
-        ...showtime.room.toJSON(),
-        seats: seatsWithAvailability
-      },
+      room: showtime.room,
+      seats: seatsWithAvailability,
       booking_info: {
         total_seats: showtime.total_seats,
         available_seats: showtime.available_seats,
@@ -166,7 +170,7 @@ class ShowtimeController {
     });
   }
 }
-
+  
   // Crear nueva función
   async createShowtime(req, res) {
     const transaction = await sequelize.transaction();

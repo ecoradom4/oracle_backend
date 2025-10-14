@@ -195,29 +195,25 @@ router.get('/', showtimeController.getShowtimes);
  *                                   type: string
  *                                 location:
  *                                   type: string
- *                                 features:
- *                                   type: array
- *                                   items:
+ *                             seats:
+ *                               type: array
+ *                               items:
+ *                                 type: object
+ *                                 properties:
+ *                                   id:
  *                                     type: string
- *                                 seats:
- *                                   type: array
- *                                   items:
- *                                     type: object
- *                                     properties:
- *                                       id:
- *                                         type: string
- *                                       row:
- *                                         type: string
- *                                       number:
- *                                         type: integer
- *                                       type:
- *                                         type: string
- *                                         enum: [standard, premium, vip]
- *                                       status:
- *                                         type: string
- *                                         enum: [available, occupied, maintenance]
- *                                       is_available:
- *                                         type: boolean
+ *                                   row:
+ *                                     type: string
+ *                                   number:
+ *                                     type: integer
+ *                                   type:
+ *                                     type: string
+ *                                     enum: [standard, premium, vip]
+ *                                   status:
+ *                                     type: string
+ *                                     enum: [available, occupied, maintenance]
+ *                                   is_available:
+ *                                     type: boolean
  *                             booking_info:
  *                               type: object
  *                               properties:
