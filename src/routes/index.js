@@ -1,4 +1,3 @@
-// src/routes/index.js
 const express = require('express');
 const router = express.Router();
 
@@ -9,6 +8,7 @@ const roomRoutes = require('./rooms');
 const showtimeRoutes = require('./showtimes');
 const bookingRoutes = require('./bookings');
 const dashboardRoutes = require('./dashboard');
+const bookingSeatRoutes = require('./bookingSeatRoutes');
 
 // Configurar rutas
 router.use('/auth', authRoutes);
@@ -17,6 +17,7 @@ router.use('/rooms', roomRoutes);
 router.use('/showtimes', showtimeRoutes);
 router.use('/bookings', bookingRoutes);
 router.use('/dashboard', dashboardRoutes);
+router.use('/booking-seats', bookingSeatRoutes);
 
 // Ruta de health check
 router.get('/health', (req, res) => {
