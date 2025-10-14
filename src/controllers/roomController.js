@@ -4,22 +4,29 @@ const { Op } = require('sequelize');
 
 class RoomController {
   // Obtener todas las salas
-  async getRooms(req, res) {
+    async getRooms(req, res) {
     try {
       const { search, status, type, location } = req.query;
 
       const whereClause = {};
       
+      // CORRECCIÓN: Para campos ENUM, necesitamos usar una condición diferente
       if (search) {
         whereClause[Op.or] = [
           { name: { [Op.iLike]: `%${search}%` } },
-          { location: { [Op.iLike]: `%${search}%` } }
+          // Para el campo ENUM 'location', usamos una comparación exacta o convertimos a texto
+          sequelize.where(
+            sequelize.cast(sequelize.col('Room.location'), 'TEXT'),
+            { [Op.iLike]: `%${search}%` }
+          )
         ];
       }
 
       if (status) whereClause.status = status;
       if (type) whereClause.type = type;
       if (location) whereClause.location = location;
+
+      console.log('Buscando salas con filtros:', { search, status, type, location });
 
       const rooms = await Room.findAll({
         where: whereClause,
