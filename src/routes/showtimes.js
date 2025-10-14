@@ -130,7 +130,119 @@ const authController = require('../controllers/authController');
  *         description: Error interno del servidor
  */
 router.get('/', showtimeController.getShowtimes);
-
+/**
+ * @swagger
+ * /api/showtimes/{id}:
+ *   get:
+ *     summary: Obtener función específica por ID con detalles completos
+ *     tags: [Showtimes]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: ID de la función
+ *     responses:
+ *       200:
+ *         description: Función obtenida exitosamente con todos los detalles
+ *         content:
+ *           application/json:
+ *             schema:
+ *               allOf:
+ *                 - $ref: '#/components/schemas/Success'
+ *                 - type: object
+ *                   properties:
+ *                     data:
+ *                       type: object
+ *                       properties:
+ *                         showtime:
+ *                           type: object
+ *                           properties:
+ *                             id:
+ *                               type: string
+ *                             movie_id:
+ *                               type: string
+ *                             room_id:
+ *                               type: string
+ *                             date:
+ *                               type: string
+ *                             time:
+ *                               type: string
+ *                             price:
+ *                               type: number
+ *                             available_seats:
+ *                               type: integer
+ *                             total_seats:
+ *                               type: integer
+ *                             createdAt:
+ *                               type: string
+ *                             updatedAt:
+ *                               type: string
+ *                             movie:
+ *                               $ref: '#/components/schemas/Movie'
+ *                             room:
+ *                               type: object
+ *                               properties:
+ *                                 id:
+ *                                   type: string
+ *                                 name:
+ *                                   type: string
+ *                                 capacity:
+ *                                   type: integer
+ *                                 type:
+ *                                   type: string
+ *                                 location:
+ *                                   type: string
+ *                                 features:
+ *                                   type: array
+ *                                   items:
+ *                                     type: string
+ *                                 seats:
+ *                                   type: array
+ *                                   items:
+ *                                     type: object
+ *                                     properties:
+ *                                       id:
+ *                                         type: string
+ *                                       row:
+ *                                         type: string
+ *                                       number:
+ *                                         type: integer
+ *                                       type:
+ *                                         type: string
+ *                                         enum: [standard, premium, vip]
+ *                                       status:
+ *                                         type: string
+ *                                         enum: [available, occupied, maintenance]
+ *                                       is_available:
+ *                                         type: boolean
+ *                             booking_info:
+ *                               type: object
+ *                               properties:
+ *                                 total_seats:
+ *                                   type: integer
+ *                                 available_seats:
+ *                                   type: integer
+ *                                 booked_seats:
+ *                                   type: integer
+ *                                 occupancy_rate:
+ *                                   type: string
+ *       404:
+ *         description: Función no encontrada
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
+ *       500:
+ *         description: Error interno del servidor
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
+ */
+router.get('/:id', showtimeController.getShowtimeById);
 /**
  * @swagger
  * /api/showtimes/{id}/seats:

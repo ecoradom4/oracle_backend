@@ -73,6 +73,100 @@ class ShowtimeController {
     }
   }
 
+  async getShowtimeById(req, res) {
+  try {
+    const { id } = req.params;
+
+    const showtime = await Showtime.findByPk(id, {
+      include: [
+        {
+          model: Movie,
+          as: 'movie',
+          attributes: ['id', 'title', 'genre', 'duration', 'rating', 'poster', 'description']
+        },
+        {
+          model: Room,
+          as: 'room',
+          attributes: ['id', 'name', 'capacity', 'type', 'location', 'features'],
+          include: [{
+            model: Seat,
+            as: 'seats',
+            attributes: ['id', 'row', 'number', 'type', 'status']
+          }]
+        }
+      ]
+    });
+
+    if (!showtime) {
+      return res.status(404).json({
+        success: false,
+        message: 'Función no encontrada'
+      });
+    }
+
+    // Obtener asientos reservados para esta función
+    const bookedSeats = await BookingSeat.findAll({
+      include: [{
+        model: Booking,
+        as: 'booking',
+        where: { 
+          showtime_id: id,
+          status: { [Op.in]: ['confirmed', 'pending'] }
+        },
+        attributes: []
+      }],
+      attributes: ['seat_id'],
+      raw: true
+    });
+
+    const bookedSeatIds = bookedSeats.map(bs => bs.seat_id);
+
+    // Preparar datos de asientos con disponibilidad
+    const seatsWithAvailability = showtime.room.seats.map(seat => ({
+      ...seat.toJSON(),
+      is_available: !bookedSeatIds.includes(seat.id)
+    }));
+
+    // Construir respuesta completa
+    const response = {
+      id: showtime.id,
+      movie_id: showtime.movie_id,
+      room_id: showtime.room_id,
+      date: showtime.date,
+      time: showtime.time,
+      price: showtime.price,
+      available_seats: showtime.available_seats,
+      total_seats: showtime.total_seats,
+      createdAt: showtime.createdAt,
+      updatedAt: showtime.updatedAt,
+      movie: showtime.movie,
+      room: {
+        ...showtime.room.toJSON(),
+        seats: seatsWithAvailability
+      },
+      booking_info: {
+        total_seats: showtime.total_seats,
+        available_seats: showtime.available_seats,
+        booked_seats: bookedSeatIds.length,
+        occupancy_rate: ((bookedSeatIds.length / showtime.total_seats) * 100).toFixed(2)
+      }
+    };
+
+    res.json({
+      success: true,
+      data: { showtime: response }
+    });
+
+  } catch (error) {
+    console.error('Error obteniendo función:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error interno del servidor',
+      error: error.message
+    });
+  }
+}
+
   // Crear nueva función
   async createShowtime(req, res) {
     const transaction = await sequelize.transaction();
