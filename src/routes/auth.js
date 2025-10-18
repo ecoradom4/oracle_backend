@@ -171,4 +171,23 @@ router.post('/login', authController.login);
  */
 router.get('/profile', authController.authenticateToken, authController.getProfile);
 
+/**
+ * @swagger
+ * /api/auth/logout:
+ *   post:
+ *     summary: Cerrar sesión
+ *     tags: [Auth]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Sesión cerrada exitosamente
+ *       400:
+ *         description: Token faltante
+ *       500:
+ *         description: Error interno del servidor
+ */
+router.post('/logout', authController.authenticateToken, authController.logout);
+
+
 module.exports = router;

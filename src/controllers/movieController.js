@@ -1,6 +1,7 @@
 // src/controllers/movieController.js
 const { Movie, Showtime, sequelize } = require('../models');
 const { Op } = require('sequelize');
+const omdbService = require('../services/OMDBService');
 
 class MovieController {
   // Obtener todas las películas (con filtros)
@@ -135,12 +136,26 @@ class MovieController {
         });
       }
 
+      let finalPoster = poster;
+
+      // Si no se proporciona un poster, buscar en OMDB
+      if (!poster || poster === '/placeholder.svg') {
+        const year = omdbService.extractYearFromDate(release_date);
+        const omdbPoster = await omdbService.getMoviePoster(title, year);
+        
+        if (omdbPoster) {
+          finalPoster = omdbPoster;
+        } else {
+          finalPoster = '/placeholder.svg';
+        }
+      }
+
       const movie = await Movie.create({
         title,
         genre,
         duration: parseInt(duration),
         rating: parseFloat(rating),
-        poster: poster || '/placeholder.svg',
+        poster: finalPoster,
         description,
         price: parseFloat(price),
         release_date
@@ -174,6 +189,19 @@ class MovieController {
           success: false,
           message: 'Película no encontrada'
         });
+      }
+
+      // Si se actualiza el título o la fecha, y no se proporciona un poster específico, buscar en OMDB
+      if ((updateData.title || updateData.release_date) && !updateData.poster) {
+        const title = updateData.title || movie.title;
+        const releaseDate = updateData.release_date || movie.release_date;
+        const year = omdbService.extractYearFromDate(releaseDate);
+        
+        const omdbPoster = await omdbService.getMoviePoster(title, year);
+        
+        if (omdbPoster) {
+          updateData.poster = omdbPoster;
+        }
       }
 
       // Convertir tipos numéricos si están presentes

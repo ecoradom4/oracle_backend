@@ -48,6 +48,7 @@ class App {
         'https://cineconnect-frontend.vercel.app',
         'http://10.204.24.130:10000',
         'http://192.168.1.31:3000',
+        'http://172.20.10.3:3000',
         process.env.FRONTEND_URL
       ].filter(Boolean),
       credentials: true,

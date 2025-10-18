@@ -220,6 +220,37 @@ class AuthController {
       next();
     };
   }
+
+    // Cierre de sesión (logout)
+  async logout(req, res) {
+    try {
+      const authHeader = req.headers['authorization'];
+      const token = authHeader && authHeader.split(' ')[1];
+
+      if (!token) {
+        return res.status(400).json({
+          success: false,
+          message: 'No se proporcionó token'
+        });
+      }
+
+      // Simplemente informar al cliente que borre el token localmente
+      // (opcionalmente podrías guardar tokens inválidos en memoria)
+      res.json({
+        success: true,
+        message: 'Sesión cerrada exitosamente'
+      });
+
+    } catch (error) {
+      console.error('Error en logout:', error);
+      res.status(500).json({
+        success: false,
+        message: 'Error interno del servidor',
+        error: error.message
+      });
+    }
+  }
+
 }
 
 module.exports = new AuthController();

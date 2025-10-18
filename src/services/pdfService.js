@@ -256,7 +256,7 @@ class PDFService {
     }
   }
 
-  static async generateSalesReport(salesData, period) {
+  static async generateSalesReport(reportData, period) {
     try {
       const reportsDir = path.join(__dirname, '../../storage/reports');
       await PDFService.ensureDirectoryExists(reportsDir);
@@ -269,6 +269,108 @@ class PDFService {
         const stream = fs.createWriteStream(filePath);
 
         doc.pipe(stream);
+
+        // Header del reporte
+        doc.fontSize(20)
+          .font('Helvetica-Bold')
+          .fillColor('#1a365d')
+          .text('CINE CONNECT', 50, 50, { align: 'center' });
+
+        doc.fontSize(16)
+          .font('Helvetica-Bold')
+          .fillColor('#2d3748')
+          .text(`REPORTE DE VENTAS - ${period.toUpperCase()}`, 50, 80, { align: 'center' });
+
+        doc.fontSize(10)
+          .font('Helvetica')
+          .fillColor('#666666')
+          .text(`Generado: ${reportData.metadata.generatedAt}`, 50, 110, { align: 'center' })
+          .text(`Período: ${reportData.metadata.dateRange.start} - ${reportData.metadata.dateRange.end}`, 50, 125, { align: 'center' });
+
+        let yPosition = 160;
+
+        // Estadísticas principales
+        doc.fontSize(14)
+          .font('Helvetica-Bold')
+          .fillColor('#000000')
+          .text('ESTADÍSTICAS PRINCIPALES', 50, yPosition);
+
+        yPosition += 30;
+
+        const stats = [
+          ['Ventas Totales:', `Q${reportData.stats.totalSales.toLocaleString('es-GT')}`],
+          ['Boletos Vendidos:', `${reportData.stats.totalTickets.toLocaleString('es-GT')}`],
+          ['Precio Promedio:', `Q${reportData.stats.averagePrice.toFixed(2)}`],
+          ['Películas Activas:', `${reportData.stats.activeMovies}`]
+        ];
+
+        stats.forEach(([label, value], index) => {
+          doc.fontSize(10)
+            .font('Helvetica-Bold')
+            .fillColor('#333333')
+            .text(label, 70, yPosition + (index * 20));
+
+          doc.fontSize(10)
+            .font('Helvetica')
+            .fillColor('#666666')
+            .text(value, 250, yPosition + (index * 20));
+        });
+
+        yPosition += 100;
+
+        // Ventas por película (primeras 5)
+        if (reportData.salesByMovie.length > 0) {
+          doc.fontSize(14)
+            .font('Helvetica-Bold')
+            .fillColor('#000000')
+            .text('TOP PELÍCULAS POR VENTAS', 50, yPosition);
+
+          yPosition += 25;
+
+          reportData.salesByMovie.slice(0, 5).forEach((movie, index) => {
+            doc.fontSize(9)
+              .font('Helvetica-Bold')
+              .fillColor('#333333')
+              .text(`${index + 1}. ${movie.movieTitle}`, 70, yPosition + (index * 15));
+
+            doc.fontSize(9)
+              .font('Helvetica')
+              .fillColor('#666666')
+              .text(`Q${movie.totalSales.toLocaleString('es-GT')} (${movie.ticketCount} boletos)`, 350, yPosition + (index * 15));
+          });
+
+          yPosition += 90;
+        }
+
+        // Distribución por género
+        if (reportData.genreDistribution.length > 0) {
+          doc.fontSize(14)
+            .font('Helvetica-Bold')
+            .fillColor('#000000')
+            .text('DISTRIBUCIÓN POR GÉNERO', 50, yPosition);
+
+          yPosition += 25;
+
+          reportData.genreDistribution.forEach((genre, index) => {
+            doc.fontSize(9)
+              .font('Helvetica-Bold')
+              .fillColor('#333333')
+              .text(`• ${genre.name}`, 70, yPosition + (index * 15));
+
+            doc.fontSize(9)
+              .font('Helvetica')
+              .fillColor('#666666')
+              .text(`${genre.value}%`, 200, yPosition + (index * 15));
+          });
+        }
+
+        // Footer
+        const footerY = doc.page.height - 50;
+        doc.fontSize(8)
+          .font('Helvetica')
+          .fillColor('#999999')
+          .text('Reporte generado automáticamente por Cine Connect Dashboard', 50, footerY, { align: 'center' });
+
         doc.end();
 
         stream.on('finish', () => {
