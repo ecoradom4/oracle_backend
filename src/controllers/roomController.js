@@ -3,8 +3,15 @@ const { Room, Seat, Showtime, sequelize } = require('../models');
 const { Op } = require('sequelize');
 
 class RoomController {
+  constructor() {
+    // Bind de los métodos que necesitan mantener el contexto
+    this.generateSeats = this.generateSeats.bind(this);
+    this.createRoom = this.createRoom.bind(this);
+    this.updateRoom = this.updateRoom.bind(this);
+  }
+
   // Obtener todas las salas
-    async getRooms(req, res) {
+  async getRooms(req, res) {
     try {
       const { search, status, type, location } = req.query;
 
@@ -49,6 +56,38 @@ class RoomController {
         error: error.message
       });
     }
+  }
+
+  // Generar asientos para una sala
+  async generateSeats(roomId, capacity) {
+    const rows = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J'];
+    const seatsPerRow = Math.ceil(capacity / rows.length);
+    const seats = [];
+
+    let seatCount = 0;
+    
+    for (const row of rows) {
+      for (let number = 1; number <= seatsPerRow; number++) {
+        if (seatCount >= capacity) break;
+
+        let type = 'standard';
+        if (rows.indexOf(row) < 2) type = 'vip';
+        else if (rows.indexOf(row) < 5) type = 'premium';
+
+        seats.push({
+          room_id: roomId,
+          row,
+          number,
+          type,
+          status: 'available'
+        });
+
+        seatCount++;
+      }
+      if (seatCount >= capacity) break;
+    }
+
+    await Seat.bulkCreate(seats);
   }
 
   // Crear nueva sala
@@ -105,38 +144,6 @@ class RoomController {
         error: error.message
       });
     }
-  }
-
-  // Generar asientos para una sala
-  async generateSeats(roomId, capacity) {
-    const rows = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J'];
-    const seatsPerRow = Math.ceil(capacity / rows.length);
-    const seats = [];
-
-    let seatCount = 0;
-    
-    for (const row of rows) {
-      for (let number = 1; number <= seatsPerRow; number++) {
-        if (seatCount >= capacity) break;
-
-        let type = 'standard';
-        if (rows.indexOf(row) < 2) type = 'vip';
-        else if (rows.indexOf(row) < 5) type = 'premium';
-
-        seats.push({
-          room_id: roomId,
-          row,
-          number,
-          type,
-          status: 'available'
-        });
-
-        seatCount++;
-      }
-      if (seatCount >= capacity) break;
-    }
-
-    await Seat.bulkCreate(seats);
   }
 
   // Actualizar sala

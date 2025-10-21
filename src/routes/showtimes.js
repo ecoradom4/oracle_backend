@@ -347,6 +347,155 @@ router.post(
 
 /**
  * @swagger
+ * /api/showtimes/schedule:
+ *   post:
+ *     summary: Programar múltiples funciones automáticamente (Solo admin)
+ *     description: 
+ *       Crea funciones de cine de forma automática según un rango de fechas, horarios definidos y configuración de sala. 
+ *       Evita duplicados y conflictos de horario existentes. 
+ *       Puede excluir días específicos de la semana y aplicar precios personalizados.
+ *     tags: [Showtimes]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - movie_id
+ *               - room_id
+ *               - start_date
+ *               - end_date
+ *               - times
+ *             properties:
+ *               movie_id:
+ *                 type: string
+ *                 format: uuid
+ *                 description: ID de la película.
+ *                 example: "3b93c7e2-52f1-4c81-8a4b-85af9a8a78a4"
+ *               room_id:
+ *                 type: string
+ *                 format: uuid
+ *                 description: ID de la sala donde se proyectará la película.
+ *                 example: "c1a4b824-908c-4baf-a9c2-9876b813a1b9"
+ *               start_date:
+ *                 type: string
+ *                 format: date
+ *                 description: Fecha inicial de programación (YYYY-MM-DD)
+ *                 example: "2025-10-22"
+ *               end_date:
+ *                 type: string
+ *                 format: date
+ *                 description: Fecha final de programación (YYYY-MM-DD)
+ *                 example: "2025-10-28"
+ *               times:
+ *                 type: array
+ *                 description: Lista de horarios diarios para programar funciones.
+ *                 items:
+ *                   type: string
+ *                   format: time
+ *                   example: "14:30"
+ *               excluded_days:
+ *                 type: array
+ *                 description: (Opcional) Días de la semana que deben excluirse de la programación.
+ *                 items:
+ *                   type: string
+ *                   enum: [sunday, monday, tuesday, wednesday, thursday, friday, saturday]
+ *                   example: "monday"
+ *               price_override:
+ *                 type: number
+ *                 format: float
+ *                 description: (Opcional) Precio personalizado para las funciones.
+ *                 example: 35.00
+ *     responses:
+ *       201:
+ *         description: Funciones programadas exitosamente.
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 message:
+ *                   type: string
+ *                   example: "Funciones programadas correctamente."
+ *                 summary:
+ *                   type: object
+ *                   properties:
+ *                     total_generated:
+ *                       type: integer
+ *                       example: 12
+ *                     total_skipped:
+ *                       type: integer
+ *                       example: 1
+ *                     date_range:
+ *                       type: object
+ *                       properties:
+ *                         start_date:
+ *                           type: string
+ *                           example: "2025-10-22"
+ *                         end_date:
+ *                           type: string
+ *                           example: "2025-10-28"
+ *                     room:
+ *                       type: object
+ *                       properties:
+ *                         id:
+ *                           type: string
+ *                         name:
+ *                           type: string
+ *                     movie:
+ *                       type: object
+ *                       properties:
+ *                         id:
+ *                           type: string
+ *                         title:
+ *                           type: string
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     created:
+ *                       type: array
+ *                       description: Lista de funciones creadas.
+ *                       items:
+ *                         $ref: '#/components/schemas/Showtime'
+ *                     skipped:
+ *                       type: array
+ *                       description: Lista de funciones omitidas por conflictos.
+ *                       items:
+ *                         type: object
+ *                         properties:
+ *                           date:
+ *                             type: string
+ *                             example: "2025-10-25"
+ *                           time:
+ *                             type: string
+ *                             example: "20:00"
+ *                           reason:
+ *                             type: string
+ *                             example: "Conflicto de horario"
+ *       400:
+ *         description: Solicitud inválida (datos faltantes o rango incorrecto)
+ *       404:
+ *         description: Película o sala no encontrada
+ *       409:
+ *         description: No se crearon funciones (todas las fechas en conflicto o excluidas)
+ *       500:
+ *         description: Error interno del servidor
+ */
+router.post(
+  '/schedule',
+  authController.authenticateToken,
+  authController.authorize(['admin']),
+  showtimeController.scheduleShowtimes
+);
+
+/**
+ * @swagger
  * /api/showtimes/{id}:
  *   put:
  *     summary: Actualizar función (Solo admin)

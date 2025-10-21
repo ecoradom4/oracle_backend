@@ -24,7 +24,7 @@ module.exports = (sequelize, DataTypes) => {
       defaultValue: 'active'
     },
     location: {
-      type: DataTypes.ENUM('Planta Baja', 'Primer Piso', 'Segundo Piso', 'Tercer Piso'),
+      type: DataTypes.ENUM('Miraflores', 'Antigua Telares', 'Cayala', 'Oakland Mall'),
       allowNull: false
     }
   }, {

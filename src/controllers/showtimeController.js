@@ -6,17 +6,17 @@ class ShowtimeController {
   // Obtener todas las funciones con filtros
   async getShowtimes(req, res) {
     try {
-      const { 
-        movieId, 
-        roomId, 
-        date, 
+      const {
+        movieId,
+        roomId,
+        date,
         time,
-        page = 1, 
-        limit = 20 
+        page = 1,
+        limit = 20
       } = req.query;
 
       const whereClause = {};
-      
+
       if (movieId) whereClause.movie_id = movieId;
       if (roomId) whereClause.room_id = roomId;
       if (date) whereClause.date = date;
@@ -128,7 +128,7 @@ class ShowtimeController {
         include: [{
           model: Booking,
           as: 'booking',
-          where: { 
+          where: {
             showtime_id: id,
             status: { [Op.in]: ['confirmed', 'pending'] }
           },
@@ -196,7 +196,7 @@ class ShowtimeController {
   // Crear nueva función
   async createShowtime(req, res) {
     const transaction = await sequelize.transaction();
-    
+
     try {
       const { movie_id, room_id, date, time } = req.body;
 
@@ -312,7 +312,7 @@ class ShowtimeController {
   // Actualizar función
   async updateShowtime(req, res) {
     const transaction = await sequelize.transaction();
-    
+
     try {
       const { id } = req.params;
       const updateData = req.body;
@@ -328,7 +328,7 @@ class ShowtimeController {
 
       // Verificar si hay reservas activas
       const activeBookings = await Booking.count({
-        where: { 
+        where: {
           showtime_id: id,
           status: { [Op.in]: ['confirmed', 'pending'] }
         },
@@ -406,7 +406,7 @@ class ShowtimeController {
   // Eliminar función
   async deleteShowtime(req, res) {
     const transaction = await sequelize.transaction();
-    
+
     try {
       const { id } = req.params;
 
@@ -421,7 +421,7 @@ class ShowtimeController {
 
       // Verificar si hay reservas activas
       const activeBookings = await Booking.count({
-        where: { 
+        where: {
           showtime_id: id,
           status: { [Op.in]: ['confirmed', 'pending'] }
         },
@@ -484,7 +484,7 @@ class ShowtimeController {
         include: [{
           model: Booking,
           as: 'booking',
-          where: { 
+          where: {
             showtime_id: id,
             status: { [Op.in]: ['confirmed', 'pending'] }
           },
@@ -523,6 +523,149 @@ class ShowtimeController {
 
     } catch (error) {
       console.error('Error obteniendo asientos:', error);
+      res.status(500).json({
+        success: false,
+        message: 'Error interno del servidor',
+        error: error.message
+      });
+    }
+  }
+
+  // Crear múltiples funciones programadas (rango de fechas y horarios)
+  async scheduleShowtimes(req, res) {
+    const transaction = await sequelize.transaction();
+    try {
+      const {
+        movie_id,
+        room_id,
+        start_date,
+        end_date,
+        times, // array ['14:00', '17:00']
+        price_override, // opcional
+        excluded_days = [] // opcional ['monday', 'tuesday']
+      } = req.body;
+
+      // --- Validación de datos de entrada ---
+      if (!movie_id || !room_id || !start_date || !end_date || !times || !Array.isArray(times)) {
+        await transaction.rollback();
+        return res.status(400).json({
+          success: false,
+          message: 'Campos requeridos: movie_id, room_id, start_date, end_date y times[]'
+        });
+      }
+
+      const start = new Date(start_date);
+      const end = new Date(end_date);
+      if (isNaN(start) || isNaN(end) || start > end) {
+        await transaction.rollback();
+        return res.status(400).json({
+          success: false,
+          message: 'Rango de fechas inválido'
+        });
+      }
+
+      if (times.some(t => !/^\d{2}:\d{2}$/.test(t))) {
+        await transaction.rollback();
+        return res.status(400).json({
+          success: false,
+          message: 'Formato de hora inválido, use HH:mm (ejemplo: "14:30")'
+        });
+      }
+
+      // --- Validar entidades base ---
+      const movie = await Movie.findByPk(movie_id, { transaction });
+      const room = await Room.findByPk(room_id, { transaction });
+
+      if (!movie || !room) {
+        await transaction.rollback();
+        return res.status(404).json({
+          success: false,
+          message: !movie ? 'Película no encontrada' : 'Sala no encontrada'
+        });
+      }
+
+      // --- Calcular precio base ---
+      let basePrice = price_override ? parseFloat(price_override) : parseFloat(movie.price);
+      switch ((room.type || '').toLowerCase()) {
+        case 'premium': basePrice *= 1.10; break;
+        case '4dx': basePrice *= 1.15; break;
+        case 'imax': basePrice *= 1.20; break;
+        case 'vip': basePrice *= 1.25; break;
+      }
+
+      // --- Helper: obtener nombre de día ---
+      const dayNames = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
+      const normalizedExcludedDays = excluded_days.map(d => d.toLowerCase());
+
+      const showtimesToCreate = [];
+      const skippedShowtimes = [];
+
+      // --- Generar fechas dentro del rango ---
+      for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
+        const dayName = dayNames[d.getDay()];
+        const dateStr = d.toISOString().split('T')[0];
+
+        // Saltar días excluidos
+        if (normalizedExcludedDays.includes(dayName)) continue;
+
+        for (const time of times) {
+          // Evitar funciones con conflictos
+          const existing = await Showtime.findOne({
+            where: { room_id, date: dateStr, time },
+            transaction
+          });
+
+          if (existing) {
+            skippedShowtimes.push({ date: dateStr, time, reason: 'Conflicto de horario' });
+            continue;
+          }
+
+          showtimesToCreate.push({
+            movie_id,
+            room_id,
+            date: dateStr,
+            time,
+            price: basePrice,
+            available_seats: room.capacity,
+            total_seats: room.capacity
+          });
+        }
+      }
+
+      // --- Validar si hay algo para crear ---
+      if (showtimesToCreate.length === 0) {
+        await transaction.rollback();
+        return res.status(409).json({
+          success: false,
+          message: 'No se crearon funciones: todas las fechas u horarios están ocupados o fueron excluidos.',
+          skipped: skippedShowtimes
+        });
+      }
+
+      // --- Insertar funciones ---
+      const createdShowtimes = await Showtime.bulkCreate(showtimesToCreate, { transaction });
+      await transaction.commit();
+
+      // --- Resumen del proceso ---
+      res.status(201).json({
+        success: true,
+        message: `Funciones programadas correctamente.`,
+        summary: {
+          total_generated: showtimesToCreate.length,
+          total_skipped: skippedShowtimes.length,
+          date_range: { start_date, end_date },
+          room: { id: room.id, name: room.name },
+          movie: { id: movie.id, title: movie.title },
+        },
+        data: {
+          created: createdShowtimes,
+          skipped: skippedShowtimes
+        }
+      });
+
+    } catch (error) {
+      await transaction.rollback();
+      console.error('Error programando funciones:', error);
       res.status(500).json({
         success: false,
         message: 'Error interno del servidor',
