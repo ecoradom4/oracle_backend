@@ -238,7 +238,7 @@ class BookingController {
   async getUserBookings(req, res) {
     try {
       const user_id = req.userId;
-      const { status, page = 1, limit = 10 } = req.query;
+      const { status, page = 1, limit = 20 } = req.query;
 
       const whereClause = { user_id };
       if (status) whereClause.status = status;

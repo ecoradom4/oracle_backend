@@ -40,73 +40,21 @@ class App {
 
   // Inicializar middlewares
   initializeMiddlewares() {
-    // CORS configuration mejorada para Render
-    const corsOptions = {
-      origin: (origin, callback) => {
-        // Lista de orígenes permitidos
-        const allowedOrigins = [
-          'http://localhost:3000',
-          'http://localhost:3001',
-          'https://cineconnect-frontend.vercel.app',
-          'http://10.204.24.130:10000',
-          'http://192.168.1.31:3000',
-          'http://172.20.10.3:3000',
-          process.env.FRONTEND_URL,
-          // Dominios de Render
-          'https://frontend-cine.onrender.com',
-          'https://*.onrender.com',
-          'http://*.onrender.com'
-        ].filter(Boolean);
-
-        // En desarrollo, permite cualquier origen
-        if (process.env.NODE_ENV === 'development') {
-          console.log('🔧 Desarrollo: Permitiendo cualquier origen CORS');
-          return callback(null, true);
-        }
-
-        // En producción, verifica el origen
-        if (!origin || allowedOrigins.some(allowedOrigin => {
-          // Permite subdominios wildcard
-          if (allowedOrigin.includes('*')) {
-            const regex = new RegExp(allowedOrigin.replace('*', '.*'));
-            return regex.test(origin);
-          }
-          return allowedOrigins.includes(origin);
-        })) {
-          console.log(`✅ Origen permitido: ${origin}`);
-          callback(null, true);
-        } else {
-          console.log(`❌ Origen bloqueado por CORS: ${origin}`);
-          callback(new Error('No permitido por CORS'));
-        }
-      },
+    // CORS configuration
+    this.app.use(cors({
+      origin: [
+        'http://localhost:3000',
+        'http://localhost:3001',
+        'https://cineconnect-frontend.vercel.app',
+        'http://10.204.24.130:10000',
+        'http://192.168.1.31:3000',
+        'http://172.20.10.3:3000',
+        process.env.FRONTEND_URL
+      ].filter(Boolean),
       credentials: true,
       methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
-      allowedHeaders: [
-        'Content-Type', 
-        'Authorization', 
-        'X-Requested-With',
-        'Accept',
-        'Origin',
-        'Access-Control-Request-Method',
-        'Access-Control-Request-Headers',
-        'X-API-Key'
-      ],
-      exposedHeaders: [
-        'Content-Length',
-        'Content-Type',
-        'Authorization',
-        'X-Powered-By'
-      ],
-      maxAge: 86400, // 24 horas
-      preflightContinue: false,
-      optionsSuccessStatus: 204
-    };
-
-    this.app.use(cors(corsOptions));
-
-    // Manejar preflight OPTIONS requests explícitamente
-    this.app.options('*', cors(corsOptions));
+      allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With']
+    }));
 
     // Body parsing middleware
     this.app.use(bodyParser.json({ limit: '10mb' }));
@@ -115,28 +63,15 @@ class App {
     // Archivos estáticos (para servir recibos, QR, imágenes, etc.)
     this.app.use('/storage', express.static(path.resolve(__dirname, '../storage'), {
       maxAge: '7d',
-      setHeaders: (res, path) => {
+      setHeaders: (res) => {
         res.setHeader('Access-Control-Allow-Origin', '*');
-        res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
       },
     }));
 
-    // Request logging mejorado
-    this.app.use((req, res, next) => {
-      console.log(`${new Date().toISOString()} - ${req.method} ${req.path} - IP: ${req.ip} - Origin: ${req.headers.origin || 'No origin'}`);
-      next();
-    });
 
-    // Headers adicionales para CORS
+    // Request logging
     this.app.use((req, res, next) => {
-      res.setHeader('Access-Control-Allow-Credentials', 'true');
-      res.setHeader('Cross-Origin-Opener-Policy', 'same-origin-allow-popups');
-      
-      // Cache para preflight requests
-      if (req.method === 'OPTIONS') {
-        res.header('Access-Control-Max-Age', '86400');
-      }
-      
+      console.log(`${new Date().toISOString()} - ${req.method} ${req.path} - IP: ${req.ip}`);
       next();
     });
 
@@ -181,34 +116,13 @@ class App {
       res.send(specs);
     });
 
-    // Health check endpoint para Render
-    this.app.get('/health', (req, res) => {
-      res.status(200).json({
-        status: 'OK',
-        service: 'CineConnect Backend',
-        timestamp: new Date().toISOString(),
-        environment: process.env.NODE_ENV || 'development',
-        database: 'Connected',
-        allowedOrigins: [
-          'http://localhost:3000',
-          'http://localhost:3001',
-          'https://cineconnect-frontend.vercel.app',
-          'https://frontend-cine.onrender.com',
-          process.env.FRONTEND_URL
-        ].filter(Boolean)
-      });
-    });
-
-    // Root endpoint mejorado
+    // Root endpoint
     this.app.get('/', (req, res) => {
       res.json({
         success: true,
         message: '🎬 Bienvenido a CineConnect API',
         version: '1.0.0',
-        environment: process.env.NODE_ENV || 'development',
-        deployment: 'Render.com',
         documentation: '/api-docs',
-        health: '/health',
         endpoints: {
           auth: '/api/auth',
           movies: '/api/movies',
@@ -217,14 +131,6 @@ class App {
           bookings: '/api/bookings',
           dashboard: '/api/dashboard'
         },
-        cors: {
-          enabled: true,
-          allowedOrigins: [
-            'https://frontend-cine.onrender.com',
-            'https://cineconnect-frontend.vercel.app',
-            'http://localhost:3000'
-          ]
-        },
         timestamp: new Date().toISOString()
       });
     });
@@ -232,30 +138,12 @@ class App {
 
   // Manejo de errores
   initializeErrorHandling() {
-    // CORS error handler
-    this.app.use((error, req, res, next) => {
-      if (error.message === 'No permitido por CORS') {
-        return res.status(403).json({
-          success: false,
-          message: 'Origen no permitido por CORS',
-          origin: req.headers.origin,
-          allowedOrigins: [
-            'https://frontend-cine.onrender.com',
-            'https://cineconnect-frontend.vercel.app',
-            'http://localhost:3000'
-          ]
-        });
-      }
-      next(error);
-    });
-
     // 404 handler
     this.app.use('*', (req, res) => {
       res.status(404).json({
         success: false,
         message: `Ruta no encontrada: ${req.originalUrl}`,
-        suggestion: 'Consulta la documentación en /api-docs',
-        health: '/health'
+        suggestion: 'Consulta la documentación en /api-docs'
       });
     });
 
@@ -308,32 +196,21 @@ class App {
       res.status(statusCode).json({
         success: false,
         message: process.env.NODE_ENV === 'production' ? 'Error interno del servidor' : message,
-        ...(process.env.NODE_ENV === 'development' && { stack: error.stack }),
-        path: req.path,
-        method: req.method
+        ...(process.env.NODE_ENV === 'development' && { stack: error.stack })
       });
     });
   }
 
   // Iniciar servidor
   start() {
-    this.server = this.app.listen(this.port, '0.0.0.0', () => {
+    this.server = this.app.listen(this.port, () => {
       console.log(`
 🎬 CINECONNECT BACKEND INICIADO CORRECTAMENTE
 
-📍 Servidor: http://0.0.0.0:${this.port}
-🌐 URL Pública: https://tu-backend.onrender.com (si estás en Render)
-📚 Documentación: /api-docs
-❤️  Health Check: /health
+📍 Servidor: http://localhost:${this.port}
+📚 Documentación: http://localhost:${this.port}/api-docs
 🗄️  Base de datos: ${process.env.DATABASE_URL ? 'Conectada' : 'No configurada'}
 🌍 Entorno: ${process.env.NODE_ENV || 'development'}
-🔧 CORS: Habilitado para Render y Vercel
-
-✅ Orígenes permitidos:
-   - https://frontend-cine.onrender.com
-   - https://cineconnect-frontend.vercel.app
-   - http://localhost:3000
-   - ${process.env.FRONTEND_URL || 'Variable FRONTEND_URL no configurada'}
 
 ¡Listo para recibir peticiones! 🚀
       `);

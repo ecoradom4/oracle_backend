@@ -12,7 +12,7 @@ class MovieController {
         genre, 
         status = 'active',
         page = 1, 
-        limit = 20 
+        limit = 50 
       } = req.query;
 
       const whereClause = { status };

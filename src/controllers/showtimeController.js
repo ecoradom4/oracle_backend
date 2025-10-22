@@ -12,7 +12,7 @@ class ShowtimeController {
         date,
         time,
         page = 1,
-        limit = 20
+        limit = 300
       } = req.query;
 
       const whereClause = {};
