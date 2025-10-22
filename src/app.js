@@ -40,27 +40,35 @@ class App {
 
   // Inicializar middlewares
   initializeMiddlewares() {
-    // CORS configuration
+    const allowedOrigins = [
+      'http://localhost:3000',
+      'https://frontend-cine-jade.vercel.app',
+      'https://frontend-cine.onrender.com',
+      process.env.FRONTEND_URL, // opcional desde variables de entorno
+    ].filter(Boolean);
+
+    // ✅ CORS Configuration
     this.app.use(cors({
-      origin: [
-        'http://localhost:3000',
-        'http://localhost:3001',
-        'https://cineconnect-frontend.vercel.app',
-        'http://10.204.24.130:10000',
-        'http://192.168.1.31:3000',
-        'http://172.20.10.3:3000',
-        process.env.FRONTEND_URL
-      ].filter(Boolean),
+      origin: function (origin, callback) {
+        // Permitir requests sin origen (como desde Postman o servidores internos)
+        if (!origin) return callback(null, true);
+        if (allowedOrigins.includes(origin)) {
+          return callback(null, true);
+        } else {
+          console.warn(`❌ CORS bloqueado para origen no autorizado: ${origin}`);
+          return callback(new Error('No autorizado por CORS'));
+        }
+      },
       credentials: true,
       methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
-      allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With']
+      allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
     }));
 
-    // Body parsing middleware
+    // ✅ Body parsing
     this.app.use(bodyParser.json({ limit: '10mb' }));
     this.app.use(bodyParser.urlencoded({ extended: true, limit: '10mb' }));
 
-    // Archivos estáticos (para servir recibos, QR, imágenes, etc.)
+    // ✅ Archivos estáticos
     this.app.use('/storage', express.static(path.resolve(__dirname, '../storage'), {
       maxAge: '7d',
       setHeaders: (res) => {
@@ -68,14 +76,13 @@ class App {
       },
     }));
 
-
-    // Request logging
+    // ✅ Logging de requests
     this.app.use((req, res, next) => {
       console.log(`${new Date().toISOString()} - ${req.method} ${req.path} - IP: ${req.ip}`);
       next();
     });
 
-    // Security headers
+    // ✅ Cabeceras de seguridad
     this.app.use((req, res, next) => {
       res.setHeader('X-Content-Type-Options', 'nosniff');
       res.setHeader('X-Frame-Options', 'DENY');
@@ -84,6 +91,7 @@ class App {
       next();
     });
   }
+
 
   // Inicializar servicios
   async initializeServices() {
