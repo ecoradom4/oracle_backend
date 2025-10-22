@@ -1,6 +1,4 @@
-// src/app.js
 const express = require('express');
-const cors = require('cors');
 const bodyParser = require('body-parser');
 const path = require('path');
 const { swaggerUi, specs } = require('../docs/swagger');
@@ -20,65 +18,72 @@ class App {
     this.initializeErrorHandling();
   }
 
-  // Inicializar base de datos
+  // 🔹 Inicializar base de datos
   async initializeDatabase() {
     try {
       await sequelize.authenticate();
       console.log('✅ Conexión a la base de datos establecida correctamente');
-
-      // Sincronizar modelos (en desarrollo)
-      //if (process.env.NODE_ENV === 'development') {
-      //await sequelize.sync({ alter: true });
-      //console.log('✅ Modelos sincronizados con la base de datos');
-      //}
-
     } catch (error) {
       console.error('❌ Error conectando a la base de datos:', error);
       process.exit(1);
     }
   }
 
-  // Inicializar middlewares
+  // 🔹 Inicializar middlewares
   initializeMiddlewares() {
     const allowedOrigins = [
       'http://localhost:3000',
+      'http://localhost:3001',
       'https://frontend-cine-jade.vercel.app',
       'https://frontend-cine.onrender.com',
       process.env.FRONTEND_URL, // opcional desde variables de entorno
     ].filter(Boolean);
 
-    // ✅ CORS Configuration
-    this.app.use(cors({
-      origin: function (origin, callback) {
-        // Permitir requests sin origen (como desde Postman o servidores internos)
-        if (!origin) return callback(null, true);
-        if (allowedOrigins.includes(origin)) {
-          return callback(null, true);
-        } else {
-          console.warn(`❌ CORS bloqueado para origen no autorizado: ${origin}`);
-          return callback(new Error('No autorizado por CORS'));
-        }
-      },
-      credentials: true,
-      methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
-      allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
-    }));
+    // ✅ CORS manual (sin errores 500 en preflight)
+    this.app.use((req, res, next) => {
+      const origin = req.headers.origin;
+      if (allowedOrigins.includes(origin)) {
+        res.header('Access-Control-Allow-Origin', origin);
+      }
+
+      res.header(
+        'Access-Control-Allow-Methods',
+        'GET, POST, PUT, DELETE, PATCH, OPTIONS'
+      );
+      res.header(
+        'Access-Control-Allow-Headers',
+        'Content-Type, Authorization, X-Requested-With'
+      );
+      res.header('Access-Control-Allow-Credentials', 'true');
+
+      // ✅ Responder automáticamente a preflight OPTIONS
+      if (req.method === 'OPTIONS') {
+        return res.sendStatus(204);
+      }
+
+      next();
+    });
 
     // ✅ Body parsing
     this.app.use(bodyParser.json({ limit: '10mb' }));
     this.app.use(bodyParser.urlencoded({ extended: true, limit: '10mb' }));
 
-    // ✅ Archivos estáticos
-    this.app.use('/storage', express.static(path.resolve(__dirname, '../storage'), {
-      maxAge: '7d',
-      setHeaders: (res) => {
-        res.setHeader('Access-Control-Allow-Origin', '*');
-      },
-    }));
+    // ✅ Archivos estáticos (ej. imágenes, QR, recibos)
+    this.app.use(
+      '/storage',
+      express.static(path.resolve(__dirname, '../storage'), {
+        maxAge: '7d',
+        setHeaders: (res) => {
+          res.setHeader('Access-Control-Allow-Origin', '*');
+        },
+      })
+    );
 
     // ✅ Logging de requests
     this.app.use((req, res, next) => {
-      console.log(`${new Date().toISOString()} - ${req.method} ${req.path} - IP: ${req.ip}`);
+      console.log(
+        `${new Date().toISOString()} - ${req.method} ${req.path} - IP: ${req.ip}`
+      );
       next();
     });
 
@@ -87,13 +92,15 @@ class App {
       res.setHeader('X-Content-Type-Options', 'nosniff');
       res.setHeader('X-Frame-Options', 'DENY');
       res.setHeader('X-XSS-Protection', '1; mode=block');
-      res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
+      res.setHeader(
+        'Strict-Transport-Security',
+        'max-age=31536000; includeSubDomains'
+      );
       next();
     });
   }
 
-
-  // Inicializar servicios
+  // 🔹 Inicializar servicios
   async initializeServices() {
     try {
       await initializeServices();
@@ -102,29 +109,33 @@ class App {
     }
   }
 
-  // Inicializar rutas
+  // 🔹 Inicializar rutas
   initializeRoutes() {
-    // API Routes
+    // API
     this.app.use('/api', routes);
 
-    // Swagger Documentation
-    this.app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(specs, {
-      explorer: true,
-      customCss: '.swagger-ui .topbar { display: none }',
-      customSiteTitle: 'CineConnect API Documentation',
-      swaggerOptions: {
-        persistAuthorization: true,
-        displayRequestDuration: true,
-      }
-    }));
+    // Swagger UI
+    this.app.use(
+      '/api-docs',
+      swaggerUi.serve,
+      swaggerUi.setup(specs, {
+        explorer: true,
+        customCss: '.swagger-ui .topbar { display: none }',
+        customSiteTitle: 'CineConnect API Documentation',
+        swaggerOptions: {
+          persistAuthorization: true,
+          displayRequestDuration: true,
+        },
+      })
+    );
 
-    // Serve Swagger JSON
+    // Swagger JSON
     this.app.get('/api-docs.json', (req, res) => {
       res.setHeader('Content-Type', 'application/json');
       res.send(specs);
     });
 
-    // Root endpoint
+    // Root
     this.app.get('/', (req, res) => {
       res.json({
         success: true,
@@ -137,21 +148,21 @@ class App {
           rooms: '/api/rooms',
           showtimes: '/api/showtimes',
           bookings: '/api/bookings',
-          dashboard: '/api/dashboard'
+          dashboard: '/api/dashboard',
         },
-        timestamp: new Date().toISOString()
+        timestamp: new Date().toISOString(),
       });
     });
   }
 
-  // Manejo de errores
+  // 🔹 Manejo de errores
   initializeErrorHandling() {
-    // 404 handler
+    // 404
     this.app.use('*', (req, res) => {
       res.status(404).json({
         success: false,
         message: `Ruta no encontrada: ${req.originalUrl}`,
-        suggestion: 'Consulta la documentación en /api-docs'
+        suggestion: 'Consulta la documentación en /api-docs',
       });
     });
 
@@ -159,57 +170,55 @@ class App {
     this.app.use((error, req, res, next) => {
       console.error('🚨 Error no manejado:', error);
 
-      // Sequelize validation errors
       if (error.name === 'SequelizeValidationError') {
-        const errors = error.errors.map(err => ({
+        const errors = error.errors.map((err) => ({
           field: err.path,
-          message: err.message
+          message: err.message,
         }));
-
         return res.status(400).json({
           success: false,
           message: 'Error de validación',
-          errors
+          errors,
         });
       }
 
-      // Sequelize unique constraint error
       if (error.name === 'SequelizeUniqueConstraintError') {
         return res.status(409).json({
           success: false,
           message: 'El recurso ya existe',
-          field: error.errors[0]?.path
+          field: error.errors[0]?.path,
         });
       }
 
-      // JWT errors
       if (error.name === 'JsonWebTokenError') {
         return res.status(401).json({
           success: false,
-          message: 'Token inválido'
+          message: 'Token inválido',
         });
       }
 
       if (error.name === 'TokenExpiredError') {
         return res.status(401).json({
           success: false,
-          message: 'Token expirado'
+          message: 'Token expirado',
         });
       }
 
-      // Default error
       const statusCode = error.statusCode || 500;
       const message = error.message || 'Error interno del servidor';
 
       res.status(statusCode).json({
         success: false,
-        message: process.env.NODE_ENV === 'production' ? 'Error interno del servidor' : message,
-        ...(process.env.NODE_ENV === 'development' && { stack: error.stack })
+        message:
+          process.env.NODE_ENV === 'production'
+            ? 'Error interno del servidor'
+            : message,
+        ...(process.env.NODE_ENV === 'development' && { stack: error.stack }),
       });
     });
   }
 
-  // Iniciar servidor
+  // 🔹 Iniciar servidor
   start() {
     this.server = this.app.listen(this.port, () => {
       console.log(`
@@ -217,18 +226,19 @@ class App {
 
 📍 Servidor: http://localhost:${this.port}
 📚 Documentación: http://localhost:${this.port}/api-docs
-🗄️  Base de datos: ${process.env.DATABASE_URL ? 'Conectada' : 'No configurada'}
+🗄️  Base de datos: ${
+        process.env.DATABASE_URL ? 'Conectada' : 'No configurada'
+      }
 🌍 Entorno: ${process.env.NODE_ENV || 'development'}
 
 ¡Listo para recibir peticiones! 🚀
       `);
     });
 
-    // Graceful shutdown
     this.setupGracefulShutdown();
   }
 
-  // Configurar apagado graceful
+  // 🔹 Apagado graceful
   setupGracefulShutdown() {
     const shutdown = async (signal) => {
       console.log(`\n📴 Recibido ${signal}. Cerrando servidor...`);
@@ -247,7 +257,6 @@ class App {
         process.exit(0);
       });
 
-      // Force close after 10 seconds
       setTimeout(() => {
         console.log('⏰ Forzando cierre del servidor...');
         process.exit(1);
@@ -256,10 +265,10 @@ class App {
 
     process.on('SIGTERM', () => shutdown('SIGTERM'));
     process.on('SIGINT', () => shutdown('SIGINT'));
-    process.on('SIGUSR2', () => shutdown('SIGUSR2')); // For nodemon
+    process.on('SIGUSR2', () => shutdown('SIGUSR2'));
   }
 
-  // Getter para testing
+  // Getter
   getApp() {
     return this.app;
   }
