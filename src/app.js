@@ -1,3 +1,4 @@
+// src/app.js
 const express = require('express');
 const bodyParser = require('body-parser');
 const path = require('path');
@@ -31,18 +32,23 @@ class App {
 
   // 🔹 Inicializar middlewares
   initializeMiddlewares() {
+    // 🟩 Orígenes permitidos
     const allowedOrigins = [
       'http://localhost:3000',
       'http://localhost:3001',
       'https://frontend-cine-jade.vercel.app',
       'https://frontend-cine.onrender.com',
-      process.env.FRONTEND_URL, // opcional desde variables de entorno
-    ].filter(Boolean);
+      'https://www.devumg.online',
+      'https://devumg.online',
+      ...(process.env.FRONTEND_URL
+        ? process.env.FRONTEND_URL.split(',').map((url) => url.trim())
+        : []),
+    ];
 
-    // ✅ CORS manual (sin errores 500 en preflight)
+    // ✅ CORS flexible
     this.app.use((req, res, next) => {
       const origin = req.headers.origin;
-      if (allowedOrigins.includes(origin)) {
+      if (origin && allowedOrigins.includes(origin)) {
         res.header('Access-Control-Allow-Origin', origin);
       }
 
@@ -56,30 +62,30 @@ class App {
       );
       res.header('Access-Control-Allow-Credentials', 'true');
 
-      // ✅ Responder automáticamente a preflight OPTIONS
+      // ⚙️ Preflight requests
       if (req.method === 'OPTIONS') {
         return res.sendStatus(204);
       }
-
       next();
     });
 
-    // ✅ Body parsing
+    // ✅ Parser
     this.app.use(bodyParser.json({ limit: '10mb' }));
     this.app.use(bodyParser.urlencoded({ extended: true, limit: '10mb' }));
 
-    // ✅ Archivos estáticos (ej. imágenes, QR, recibos)
+    // ✅ Archivos estáticos (ej. recibos, imágenes, QR)
     this.app.use(
       '/storage',
       express.static(path.resolve(__dirname, '../storage'), {
         maxAge: '7d',
         setHeaders: (res) => {
+          // Permitir acceso a archivos estáticos desde cualquier origen (solo lectura)
           res.setHeader('Access-Control-Allow-Origin', '*');
         },
       })
     );
 
-    // ✅ Logging de requests
+    // ✅ Logging
     this.app.use((req, res, next) => {
       console.log(
         `${new Date().toISOString()} - ${req.method} ${req.path} - IP: ${req.ip}`
@@ -98,6 +104,16 @@ class App {
       );
       next();
     });
+
+    // ✅ Forzar HTTPS en producción (Render usa proxy)
+    if (process.env.NODE_ENV === 'production') {
+      this.app.use((req, res, next) => {
+        if (req.headers['x-forwarded-proto'] !== 'https') {
+          return res.redirect(`https://${req.headers.host}${req.url}`);
+        }
+        next();
+      });
+    }
   }
 
   // 🔹 Inicializar servicios
@@ -111,7 +127,6 @@ class App {
 
   // 🔹 Inicializar rutas
   initializeRoutes() {
-    // API
     this.app.use('/api', routes);
 
     // Swagger UI
@@ -135,7 +150,7 @@ class App {
       res.send(specs);
     });
 
-    // Root
+    // Root endpoint
     this.app.get('/', (req, res) => {
       res.json({
         success: true,
@@ -157,7 +172,6 @@ class App {
 
   // 🔹 Manejo de errores
   initializeErrorHandling() {
-    // 404
     this.app.use('*', (req, res) => {
       res.status(404).json({
         success: false,
@@ -166,19 +180,17 @@ class App {
       });
     });
 
-    // Global error handler
     this.app.use((error, req, res, next) => {
       console.error('🚨 Error no manejado:', error);
 
       if (error.name === 'SequelizeValidationError') {
-        const errors = error.errors.map((err) => ({
-          field: err.path,
-          message: err.message,
-        }));
         return res.status(400).json({
           success: false,
           message: 'Error de validación',
-          errors,
+          errors: error.errors.map((err) => ({
+            field: err.path,
+            message: err.message,
+          })),
         });
       }
 
@@ -191,17 +203,11 @@ class App {
       }
 
       if (error.name === 'JsonWebTokenError') {
-        return res.status(401).json({
-          success: false,
-          message: 'Token inválido',
-        });
+        return res.status(401).json({ success: false, message: 'Token inválido' });
       }
 
       if (error.name === 'TokenExpiredError') {
-        return res.status(401).json({
-          success: false,
-          message: 'Token expirado',
-        });
+        return res.status(401).json({ success: false, message: 'Token expirado' });
       }
 
       const statusCode = error.statusCode || 500;
@@ -268,7 +274,6 @@ class App {
     process.on('SIGUSR2', () => shutdown('SIGUSR2'));
   }
 
-  // Getter
   getApp() {
     return this.app;
   }
