@@ -558,4 +558,6 @@ router.delete(
   movieController.deleteMovie
 );
 
+router.get('/now-playing', movieController.getNowPlaying);
+
 module.exports = router;

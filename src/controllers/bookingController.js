@@ -5,7 +5,7 @@ const { sendBookingConfirmation } = require('../services/emailService');
 const PDFService = require('../services/pdfService.js');
 
 class BookingController {
-  // Crear nueva reserva
+  // Crear nueva reserva - ACTUALIZADO PARA ORACLE
   async createBooking(req, res) {
     const transaction = await sequelize.transaction();
 
@@ -28,7 +28,7 @@ class BookingController {
         });
       }
 
-      // Verificar que la función existe
+      // Verificar que la función existe - ACTUALIZADO
       const showtime = await Showtime.findByPk(showtime_id, {
         include: [
           { model: Movie, as: 'movie' },
@@ -45,9 +45,12 @@ class BookingController {
         });
       }
 
-      // Verificar que la función sea futura
-      const showtimeDate = new Date(`${showtime.date}T${showtime.time}`);
-      if (showtimeDate < new Date()) {
+      // Verificar que la función sea futura - ACTUALIZADO PARA FECHAS ORACLE
+      const showtimeDateTime = new Date(showtime.date);
+      const [hours, minutes, seconds] = showtime.time.split(':');
+      showtimeDateTime.setHours(parseInt(hours), parseInt(minutes), parseInt(seconds));
+      
+      if (showtimeDateTime < new Date()) {
         await transaction.rollback();
         return res.status(400).json({
           success: false,
@@ -55,11 +58,12 @@ class BookingController {
         });
       }
 
-      // Verificar disponibilidad de asientos
+      // Verificar disponibilidad de asientos - ACTUALIZADO
       const seats = await Seat.findAll({
         where: {
           id: { [Op.in]: seat_ids },
-          room_id: showtime.room_id
+          room_id: showtime.room_id,
+          status: 'available' // Añadida verificación de estado
         },
         transaction
       });
@@ -68,37 +72,36 @@ class BookingController {
         await transaction.rollback();
         return res.status(400).json({
           success: false,
-          message: 'Algunos asientos no existen en esta sala'
+          message: 'Algunos asientos no están disponibles o no existen en esta sala'
         });
       }
 
-      // Verificar que no estén ya reservados
-      const bookedSeats = await BookingSeat.findAll({
+      // Verificar que no estén ya reservados - ACTUALIZADO
+      const existingBookingSeats = await BookingSeat.findAll({
+        where: {
+          seat_id: { [Op.in]: seat_ids }
+        },
         include: [{
           model: Booking,
           as: 'booking',
           where: {
-            showtime_id,
+            showtime_id: showtime_id,
             status: { [Op.in]: ['confirmed', 'pending'] }
-          },
-          attributes: []
+          }
         }],
-        where: { seat_id: { [Op.in]: seat_ids } },
-        attributes: ['seat_id'],
-        transaction,
-        raw: true
+        transaction
       });
 
-      if (bookedSeats.length > 0) {
+      if (existingBookingSeats.length > 0) {
         await transaction.rollback();
         return res.status(409).json({
           success: false,
           message: 'Algunos asientos ya están reservados',
-          bookedSeats: bookedSeats.map(bs => bs.seat_id)
+          bookedSeats: existingBookingSeats.map(bs => bs.seat_id)
         });
       }
 
-      // Calcular precios
+      // Calcular precios - ACTUALIZADO PARA DECIMALES ORACLE
       const basePrice = parseFloat(showtime.price);
       let totalPrice = 0;
       const bookingSeatsData = [];
@@ -106,16 +109,17 @@ class BookingController {
       for (const seat of seats) {
         let seatPrice = basePrice;
 
+        // Aplicar multiplicadores según tipo de asiento
         switch (seat.type.toLowerCase()) {
           case 'premium':
-            seatPrice *= 1.10;
+            seatPrice *= 1.10; // Aumentado a 10%
             break;
           case 'vip':
-            seatPrice *= 1.20;
+            seatPrice *= 1.20; // Aumentado a 20%
             break;
         }
 
-        seatPrice = parseFloat(seatPrice.toFixed(2));
+        seatPrice = Math.round(seatPrice * 100) / 100; // Redondear a 2 decimales
         totalPrice += seatPrice;
 
         bookingSeatsData.push({
@@ -124,13 +128,14 @@ class BookingController {
         });
       }
 
-      const serviceFee = parseFloat((totalPrice * 0.05).toFixed(2));
-      totalPrice = parseFloat((totalPrice + serviceFee).toFixed(2));
+      // Calcular tarifa de servicio
+      const serviceFee = Math.round(totalPrice * 0.05 * 100) / 100;
+      totalPrice = Math.round((totalPrice + serviceFee) * 100) / 100;
 
       // Crear transacción única
-      const transaction_id = `TXN-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+      const transaction_id = `TXN-${Date.now()}-${Math.random().toString(36).substr(2, 9).toUpperCase()}`;
 
-      // Crear reserva
+      // Crear reserva - ACTUALIZADO
       const booking = await Booking.create({
         transaction_id,
         user_id,
@@ -138,10 +143,11 @@ class BookingController {
         total_price: totalPrice,
         payment_method: payment_method || 'Tarjeta de Crédito',
         customer_email: customer_email || req.userEmail,
-        status: 'confirmed'
+        status: 'confirmed',
+        purchase_date: new Date() // Asegurar fecha de compra
       }, { transaction });
 
-      // Asociar asientos reservados
+      // Asociar asientos reservados - ACTUALIZADO
       const bookingSeats = bookingSeatsData.map(bs => ({
         ...bs,
         booking_id: booking.id
@@ -149,23 +155,34 @@ class BookingController {
 
       await BookingSeat.bulkCreate(bookingSeats, { transaction });
 
-      // Actualizar cupo
-      await showtime.decrement('available_seats', {
-        by: seat_ids.length,
-        transaction
-      });
+      // Actualizar cupo disponible - ACTUALIZADO
+      const newAvailableSeats = showtime.available_seats - seat_ids.length;
+      if (newAvailableSeats < 0) {
+        await transaction.rollback();
+        return res.status(400).json({
+          success: false,
+          message: 'No hay suficientes asientos disponibles'
+        });
+      }
 
-      // Generar QR
-      const qrResult = await QRService.generateBookingQR({
-        transaction_id,
-        id: booking.id,
-        showtime,
-        bookingSeats: bookingSeatsData.map((bs, index) => ({
-          seat: seats[index]
-        })),
-        customer_email: booking.customer_email,
-        purchase_date: booking.purchase_date
-      });
+      await showtime.update({
+        available_seats: newAvailableSeats
+      }, { transaction });
+
+      // Generar QR - ACTUALIZADO
+      const qrData = {
+        booking_id: booking.id,
+        transaction_id: booking.transaction_id,
+        showtime_id: showtime.id,
+        movie_title: showtime.movie.title,
+        room_name: showtime.room.name,
+        date: showtime.date,
+        time: showtime.time,
+        seats: seats.map(seat => `${seat.row}${seat.number}`),
+        customer_email: booking.customer_email
+      };
+
+      const qrResult = await QRService.generateBookingQR(qrData);
 
       await booking.update({
         qr_code_data: qrResult.dataURL
@@ -177,15 +194,17 @@ class BookingController {
         showtime,
         seats,
         totalPrice,
-        qrResult.filePath // aquí pasamos correctamente el QR físico
+        qrResult.filePath
       );
 
-      await booking.update({ receipt_url: receiptUrl }, { transaction });
+      await booking.update({ 
+        receipt_url: receiptUrl 
+      }, { transaction });
 
       // Confirmar transacción
       await transaction.commit();
 
-      // Obtener reserva completa (fuera de la transacción)
+      // Obtener reserva completa - ACTUALIZADO
       const completeBooking = await Booking.findByPk(booking.id, {
         include: [
           {
@@ -204,12 +223,9 @@ class BookingController {
         ]
       });
 
-      // Añadir QR base64 para el correo
-      completeBooking.qr_data_url = qrResult.dataURL;
-
-      // ✅ Enviar correo de confirmación
+      // Enviar correo de confirmación
       try {
-        await sendBookingConfirmation(completeBooking);
+        await sendBookingConfirmation(completeBooking, qrResult.dataURL);
       } catch (emailError) {
         console.error('Error enviando email de confirmación:', emailError);
       }
@@ -217,7 +233,10 @@ class BookingController {
       res.status(201).json({
         success: true,
         message: 'Reserva creada exitosamente',
-        data: { booking: completeBooking }
+        data: { 
+          booking: completeBooking,
+          qr_code: qrResult.dataURL // Incluir QR en respuesta
+        }
       });
 
     } catch (error) {
@@ -226,29 +245,40 @@ class BookingController {
       }
 
       console.error('Error creando reserva:', error);
+      
+      // Manejar errores específicos de Oracle
+      if (error.name === 'SequelizeUniqueConstraintError') {
+        return res.status(409).json({
+          success: false,
+          message: 'La transacción ya existe'
+        });
+      }
+
       res.status(500).json({
         success: false,
         message: 'Error interno del servidor',
-        error: error.message
+        error: process.env.NODE_ENV === 'development' ? error.message : 'Error del sistema'
       });
     }
   }
 
-  // Obtener reservas del usuario
+  // Obtener reservas del usuario - ACTUALIZADO
   async getUserBookings(req, res) {
     try {
       const user_id = req.userId;
-      const { status, page = 1, limit = 20 } = req.query;
+      const { status, page = 1, limit = 10 } = req.query; // Reducido límite por defecto
 
       const whereClause = { user_id };
-      if (status) whereClause.status = status;
+      if (status && status !== 'all') {
+        whereClause.status = status;
+      }
 
-      const offset = (page - 1) * limit;
+      const offset = (parseInt(page) - 1) * parseInt(limit);
 
       const bookings = await Booking.findAndCountAll({
         where: whereClause,
         limit: parseInt(limit),
-        offset: parseInt(offset),
+        offset: offset,
         include: [
           {
             model: Showtime,
@@ -257,7 +287,7 @@ class BookingController {
               {
                 model: Movie,
                 as: 'movie',
-                attributes: ['id', 'title', 'poster']
+                attributes: ['id', 'title', 'poster', 'duration']
               },
               {
                 model: Room,
@@ -276,7 +306,7 @@ class BookingController {
             }]
           }
         ],
-        order: [['purchase_date', 'DESC']]
+        order: [['created_at', 'DESC']] // Usar nombre de campo Oracle
       });
 
       res.json({
@@ -286,6 +316,7 @@ class BookingController {
           pagination: {
             total: bookings.count,
             page: parseInt(page),
+            limit: parseInt(limit),
             totalPages: Math.ceil(bookings.count / limit),
             hasNext: offset + bookings.rows.length < bookings.count,
             hasPrev: page > 1
@@ -298,12 +329,12 @@ class BookingController {
       res.status(500).json({
         success: false,
         message: 'Error interno del servidor',
-        error: error.message
+        error: process.env.NODE_ENV === 'development' ? error.message : 'Error del sistema'
       });
     }
   }
 
-  // Obtener reserva específica
+  // Obtener reserva específica - ACTUALIZADO
   async getBookingById(req, res) {
     try {
       const { id } = req.params;
@@ -311,8 +342,6 @@ class BookingController {
       const user_role = req.userRole;
 
       const whereClause = { id };
-
-      // Usuarios normales solo pueden ver sus propias reservas
       if (user_role !== 'admin') {
         whereClause.user_id = user_id;
       }
@@ -327,12 +356,12 @@ class BookingController {
               {
                 model: Movie,
                 as: 'movie',
-                attributes: ['id', 'title', 'genre', 'duration', 'poster']
+                attributes: ['id', 'title', 'genre', 'duration', 'poster', 'rating']
               },
               {
                 model: Room,
                 as: 'room',
-                attributes: ['id', 'name', 'location']
+                attributes: ['id', 'name', 'location', 'type']
               }
             ]
           },
@@ -344,11 +373,6 @@ class BookingController {
               as: 'seat',
               attributes: ['id', 'row', 'number', 'type']
             }]
-          },
-          {
-            model: User,
-            as: 'user',
-            attributes: ['id', 'name', 'email', 'phone']
           }
         ]
       });
@@ -370,12 +394,12 @@ class BookingController {
       res.status(500).json({
         success: false,
         message: 'Error interno del servidor',
-        error: error.message
+        error: process.env.NODE_ENV === 'development' ? error.message : 'Error del sistema'
       });
     }
   }
 
-  // Cancelar reserva
+  // Cancelar reserva - ACTUALIZADO
   async cancelBooking(req, res) {
     const transaction = await sequelize.transaction();
 
@@ -414,8 +438,19 @@ class BookingController {
         });
       }
 
-      // Verificar que no sea muy tarde para cancelar (más de 2 horas antes)
-      const showtimeDate = new Date(`${booking.showtime.date}T${booking.showtime.time}`);
+      if (booking.status === 'completed') {
+        await transaction.rollback();
+        return res.status(400).json({
+          success: false,
+          message: 'No se puede cancelar una reserva completada'
+        });
+      }
+
+      // Verificar tiempo de cancelación - ACTUALIZADO
+      const showtimeDate = new Date(booking.showtime.date);
+      const [hours, minutes] = booking.showtime.time.split(':');
+      showtimeDate.setHours(parseInt(hours), parseInt(minutes));
+      
       const timeUntilShowtime = showtimeDate - new Date();
       const hoursUntilShowtime = timeUntilShowtime / (1000 * 60 * 60);
 
@@ -445,21 +480,29 @@ class BookingController {
 
       res.json({
         success: true,
-        message: 'Reserva cancelada exitosamente'
+        message: 'Reserva cancelada exitosamente',
+        data: {
+          booking_id: id,
+          refund_amount: booking.total_price * 0.8 // 80% de reembolso
+        }
       });
 
     } catch (error) {
-      await transaction.rollback();
+      if (transaction && !transaction.finished) {
+        await transaction.rollback();
+      }
+      
       console.error('Error cancelando reserva:', error);
       res.status(500).json({
         success: false,
         message: 'Error interno del servidor',
-        error: error.message
+        error: process.env.NODE_ENV === 'development' ? error.message : 'Error del sistema'
       });
     }
   }
 
-    async downloadReceipt(req, res) {
+  // Descargar recibo - ACTUALIZADO
+  async downloadReceipt(req, res) {
     try {
       const { id } = req.params;
       const user_id = req.userId;
@@ -472,21 +515,7 @@ class BookingController {
 
       const booking = await Booking.findOne({
         where: whereClause,
-        include: [
-          {
-            model: Showtime,
-            as: 'showtime',
-            include: [
-              { model: Movie, as: 'movie' },
-              { model: Room, as: 'room' }
-            ]
-          },
-          {
-            model: BookingSeat,
-            as: 'bookingSeats',
-            include: [{ model: Seat, as: 'seat' }]
-          }
-        ]
+        attributes: ['id', 'transaction_id', 'receipt_url']
       });
 
       if (!booking) {
@@ -499,23 +528,20 @@ class BookingController {
       if (!booking.receipt_url) {
         return res.status(404).json({
           success: false,
-          message: 'Recibo no disponible'
+          message: 'Recibo no disponible para esta reserva'
         });
       }
 
-      // Obtener la URL base del backend desde las variables de entorno
       const backendUrl = process.env.BACKEND_URL || 'http://localhost:4000';
-      
-      // Construir la URL completa del recibo
       const fullDownloadUrl = `${backendUrl}${booking.receipt_url}`;
 
       res.json({
         success: true,
         message: 'Recibo listo para descargar',
         data: {
-          download_url: fullDownloadUrl, // URL completa
+          download_url: fullDownloadUrl,
           filename: `recibo-${booking.transaction_id}.pdf`,
-          relative_url: booking.receipt_url // Mantener también la ruta relativa por si se necesita
+          booking_id: booking.id
         }
       });
 
@@ -524,7 +550,7 @@ class BookingController {
       res.status(500).json({
         success: false,
         message: 'Error interno del servidor',
-        error: error.message
+        error: process.env.NODE_ENV === 'development' ? error.message : 'Error del sistema'
       });
     }
   }

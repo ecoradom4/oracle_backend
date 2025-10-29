@@ -245,4 +245,6 @@ router.delete(
   roomController.deleteRoom
 );
 
+router.get('/:id/details', roomController.getRoomDetails);
+
 module.exports = router;

@@ -1,13 +1,13 @@
-// src/models/Seat.js
+// src/models/Seat.js - Oracle Compatible
 module.exports = (sequelize, DataTypes) => {
   const Seat = sequelize.define('Seat', {
     id: {
-      type: DataTypes.UUID,
+      type: DataTypes.STRING(36),
       defaultValue: DataTypes.UUIDV4,
       primaryKey: true
     },
     room_id: {
-      type: DataTypes.UUID,
+      type: DataTypes.STRING(36),
       allowNull: false
     },
     row: {
@@ -19,16 +19,33 @@ module.exports = (sequelize, DataTypes) => {
       allowNull: false
     },
     type: {
-      type: DataTypes.ENUM('standard', 'premium', 'vip'),
-      defaultValue: 'standard'
+      type: DataTypes.STRING(20),
+      defaultValue: 'standard',
+      validate: {
+        isIn: [['standard', 'premium', 'vip']]
+      }
     },
     status: {
-      type: DataTypes.ENUM('available', 'occupied', 'maintenance'),
-      defaultValue: 'available'
+      type: DataTypes.STRING(20),
+      defaultValue: 'available',
+      validate: {
+        isIn: [['available', 'occupied', 'maintenance']]
+      }
+    },
+    created_at: {
+      type: DataTypes.DATE,
+      field: 'created_at'
+    },
+    updated_at: {
+      type: DataTypes.DATE,
+      field: 'updated_at'
     }
   }, {
     tableName: 'seats',
     timestamps: true,
+    underscored: true,
+    createdAt: 'created_at',
+    updatedAt: 'updated_at',
     indexes: [
       {
         unique: true,

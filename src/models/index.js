@@ -2,16 +2,30 @@
 const { Sequelize } = require('sequelize');
 const config = require('../config/database');
 
-const sequelize = new Sequelize(process.env.DATABASE_URL, {
-  dialect: 'postgres',
-  logging: false,
-  dialectOptions: {
-    ssl: {
-      require: true,
-      rejectUnauthorized: false
-    }
-  }
+const env = process.env.NODE_ENV || 'development';
+const dbConfig = config[env];
+
+const sequelize = new Sequelize({
+  dialect: dbConfig.dialect,
+  username: dbConfig.username,
+  password: dbConfig.password,
+  dialectOptions: dbConfig.dialectOptions,
+  pool: dbConfig.pool,
+  logging: dbConfig.logging,
+  define: dbConfig.define
 });
+
+// Función para probar la conexión
+const testConnection = async () => {
+  try {
+    await sequelize.authenticate();
+    console.log('✅ Conexión a Oracle Cloud establecida correctamente');
+    return true;
+  } catch (error) {
+    console.error('❌ Error al conectar con Oracle:', error.message);
+    return false;
+  }
+};
 
 const models = {
   User: require('./User')(sequelize, Sequelize.DataTypes),
@@ -54,5 +68,6 @@ models.BookingSeat.belongsTo(models.Seat, { foreignKey: 'seat_id', as: 'seat' })
 
 models.sequelize = sequelize;
 models.Sequelize = Sequelize;
+models.testConnection = testConnection;
 
 module.exports = models;

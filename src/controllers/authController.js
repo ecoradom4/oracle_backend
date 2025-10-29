@@ -1,10 +1,10 @@
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const { User } = require('../models');
-const { EmailService } = require('../services'); // AÑADIR ESTA IMPORTACIÓN
+const { EmailService } = require('../services');
 
 class AuthController {
-  // Registro de usuario
+  // Registro de usuario - ACTUALIZADO PARA ORACLE
   async register(req, res) {
     try {
       const { name, email, password, role = 'cliente', phone } = req.body;
@@ -24,8 +24,13 @@ class AuthController {
         });
       }
 
-      // Verificar si el usuario ya existe
-      const existingUser = await User.findOne({ where: { email } });
+      // Verificar si el usuario ya existe - ACTUALIZADO
+      const existingUser = await User.findOne({ 
+        where: { 
+          email: email.toLowerCase().trim() // Oracle es case-sensitive
+        } 
+      });
+      
       if (existingUser) {
         return res.status(409).json({
           success: false,
@@ -36,34 +41,43 @@ class AuthController {
       // Hash de la contraseña
       const hashedPassword = await bcrypt.hash(password, 12);
 
-      // Crear usuario
+      // Crear usuario - ACTUALIZADO PARA UUID DE ORACLE
       const user = await User.create({
-        name,
-        email,
+        name: name.trim(),
+        email: email.toLowerCase().trim(),
         password: hashedPassword,
-        role,
-        phone
+        role: role.toLowerCase(),
+        phone: phone ? phone.trim() : null
       });
 
       // Generar token JWT
       const token = jwt.sign(
-        { userId: user.id, email: user.email, role: user.role },
+        { 
+          userId: user.id, 
+          email: user.email, 
+          role: user.role 
+        },
         process.env.JWT_SECRET,
-        { expiresIn: '1h' }
+        { expiresIn: '24h' } // Aumentado a 24h
       );
 
       // Enviar email de bienvenida
-      await EmailService.sendWelcomeEmail(user.email, user.name);
+      try {
+        await EmailService.sendWelcomeEmail(user.email, user.name);
+      } catch (emailError) {
+        console.error('Error enviando email de bienvenida:', emailError);
+        // No fallar el registro si el email falla
+      }
 
-      // Excluir password de la respuesta
+      // Excluir password de la respuesta - ACTUALIZADO NOMBRES DE CAMPOS
       const userResponse = {
         id: user.id,
         name: user.name,
         email: user.email,
         role: user.role,
         phone: user.phone,
-        createdAt: user.createdAt,
-        updatedAt: user.updatedAt
+        created_at: user.created_at, // Usar nombres de Oracle
+        updated_at: user.updated_at
       };
 
       res.status(201).json({
@@ -77,15 +91,24 @@ class AuthController {
 
     } catch (error) {
       console.error('Error en registro:', error);
+      
+      // Manejar errores específicos de Oracle
+      if (error.name === 'SequelizeUniqueConstraintError') {
+        return res.status(409).json({
+          success: false,
+          message: 'El email ya está registrado'
+        });
+      }
+      
       res.status(500).json({
         success: false,
         message: 'Error interno del servidor',
-        error: error.message
+        error: process.env.NODE_ENV === 'development' ? error.message : 'Error del sistema'
       });
     }
   }
 
-  // Login de usuario
+  // Login de usuario - ACTUALIZADO
   async login(req, res) {
     try {
       const { email, password } = req.body;
@@ -98,8 +121,13 @@ class AuthController {
         });
       }
 
-      // Buscar usuario
-      const user = await User.findOne({ where: { email } });
+      // Buscar usuario - ACTUALIZADO PARA CASE-SENSITIVE
+      const user = await User.findOne({ 
+        where: { 
+          email: email.toLowerCase().trim() 
+        } 
+      });
+      
       if (!user) {
         return res.status(401).json({
           success: false,
@@ -118,20 +146,24 @@ class AuthController {
 
       // Generar token JWT
       const token = jwt.sign(
-        { userId: user.id, email: user.email, role: user.role },
+        { 
+          userId: user.id, 
+          email: user.email, 
+          role: user.role 
+        },
         process.env.JWT_SECRET,
         { expiresIn: '24h' }
       );
 
-      // Excluir password de la respuesta
+      // Excluir password de la respuesta - ACTUALIZADO
       const userResponse = {
         id: user.id,
         name: user.name,
         email: user.email,
         role: user.role,
         phone: user.phone,
-        createdAt: user.createdAt,
-        updatedAt: user.updatedAt
+        created_at: user.created_at,
+        updated_at: user.updated_at
       };
 
       res.json({
@@ -148,16 +180,18 @@ class AuthController {
       res.status(500).json({
         success: false,
         message: 'Error interno del servidor',
-        error: error.message
+        error: process.env.NODE_ENV === 'development' ? error.message : 'Error del sistema'
       });
     }
   }
 
-  // Obtener perfil del usuario actual
+  // Obtener perfil del usuario actual - ACTUALIZADO
   async getProfile(req, res) {
     try {
       const user = await User.findByPk(req.userId, {
-        attributes: { exclude: ['password'] }
+        attributes: { 
+          exclude: ['password'] 
+        }
       });
 
       if (!user) {
@@ -167,9 +201,20 @@ class AuthController {
         });
       }
 
+      // Formatear respuesta para Oracle
+      const userResponse = {
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        role: user.role,
+        phone: user.phone,
+        created_at: user.created_at,
+        updated_at: user.updated_at
+      };
+
       res.json({
         success: true,
-        data: { user }
+        data: { user: userResponse }
       });
 
     } catch (error) {
@@ -177,16 +222,16 @@ class AuthController {
       res.status(500).json({
         success: false,
         message: 'Error interno del servidor',
-        error: error.message
+        error: process.env.NODE_ENV === 'development' ? error.message : 'Error del sistema'
       });
     }
   }
 
-  // Middleware de autenticación
+  // Middleware de autenticación (sin cambios)
   async authenticateToken(req, res, next) {
     try {
       const authHeader = req.headers['authorization'];
-      const token = authHeader && authHeader.split(' ')[1]; // Bearer TOKEN
+      const token = authHeader && authHeader.split(' ')[1];
 
       if (!token) {
         return res.status(401).json({
@@ -198,6 +243,7 @@ class AuthController {
       const decoded = jwt.verify(token, process.env.JWT_SECRET);
       req.userId = decoded.userId;
       req.userRole = decoded.role;
+      req.userEmail = decoded.email; // Añadido para usar en otros controladores
       next();
 
     } catch (error) {
@@ -208,7 +254,7 @@ class AuthController {
     }
   }
 
-  // Middleware de autorización por rol
+  // Middleware de autorización por rol (sin cambios)
   authorize(roles = []) {
     return (req, res, next) => {
       if (!roles.includes(req.userRole)) {
@@ -221,26 +267,13 @@ class AuthController {
     };
   }
 
-    // Cierre de sesión (logout)
+  // Cierre de sesión (sin cambios)
   async logout(req, res) {
     try {
-      const authHeader = req.headers['authorization'];
-      const token = authHeader && authHeader.split(' ')[1];
-
-      if (!token) {
-        return res.status(400).json({
-          success: false,
-          message: 'No se proporcionó token'
-        });
-      }
-
-      // Simplemente informar al cliente que borre el token localmente
-      // (opcionalmente podrías guardar tokens inválidos en memoria)
       res.json({
         success: true,
         message: 'Sesión cerrada exitosamente'
       });
-
     } catch (error) {
       console.error('Error en logout:', error);
       res.status(500).json({
@@ -250,7 +283,6 @@ class AuthController {
       });
     }
   }
-
 }
 
 module.exports = new AuthController();

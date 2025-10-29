@@ -1,25 +1,25 @@
-// src/models/Showtime.js
+// src/models/Showtime.js - Oracle Compatible
 module.exports = (sequelize, DataTypes) => {
   const Showtime = sequelize.define('Showtime', {
     id: {
-      type: DataTypes.UUID,
+      type: DataTypes.STRING(36),
       defaultValue: DataTypes.UUIDV4,
       primaryKey: true
     },
     movie_id: {
-      type: DataTypes.UUID,
+      type: DataTypes.STRING(36),
       allowNull: false
     },
     room_id: {
-      type: DataTypes.UUID,
+      type: DataTypes.STRING(36),
       allowNull: false
     },
     date: {
-      type: DataTypes.DATEONLY,
+      type: DataTypes.DATE,
       allowNull: false
     },
     time: {
-      type: DataTypes.TIME,
+      type: DataTypes.STRING(8), // Formato HH:MM:SS
       allowNull: false
     },
     price: {
@@ -33,10 +33,21 @@ module.exports = (sequelize, DataTypes) => {
     total_seats: {
       type: DataTypes.INTEGER,
       allowNull: false
+    },
+    created_at: {
+      type: DataTypes.DATE,
+      field: 'created_at'
+    },
+    updated_at: {
+      type: DataTypes.DATE,
+      field: 'updated_at'
     }
   }, {
     tableName: 'showtimes',
     timestamps: true,
+    underscored: true,
+    createdAt: 'created_at',
+    updatedAt: 'updated_at',
     indexes: [
       {
         unique: true,

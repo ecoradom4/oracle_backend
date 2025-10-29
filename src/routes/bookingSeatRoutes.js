@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const { getBookedSeatsByShowtime } = require('../controllers/bookingSeatController');
+const bookingSeatController = require('../controllers/bookingSeatController');
 
 /**
  * @swagger
@@ -68,6 +68,8 @@ const { getBookedSeatsByShowtime } = require('../controllers/bookingSeatControll
  *               success: false
  *               message: "Error interno del servidor"
  */
-router.get('/', getBookedSeatsByShowtime);
+router.get('/', bookingSeatController.getBookedSeatsByShowtime);
+
+router.post('/check-availability', bookingSeatController.checkSeatsAvailability);
 
 module.exports = router;
